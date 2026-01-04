@@ -30,26 +30,22 @@ class PIIPattern:
 
 
 # Pattern definitions
+# NOTE: Order matters - more specific patterns (CPF, CNPJ) should come before
+# less specific ones (Cédula) to avoid double-matching
 PII_PATTERNS: list[PIIPattern] = [
-    # Brazilian CPF: XXX.XXX.XXX-XX or XXXXXXXXXXX
+    # Brazilian CPF: XXX.XXX.XXX-XX or XXXXXXXXXXX (11 digits)
     PIIPattern(
         name="cpf",
         pattern=re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b"),
         token_prefix="PII_CPF",
     ),
-    # Brazilian CNPJ: XX.XXX.XXX/XXXX-XX or XXXXXXXXXXXXXX
+    # Brazilian CNPJ: XX.XXX.XXX/XXXX-XX or XXXXXXXXXXXXXX (14 digits)
     PIIPattern(
         name="cnpj",
         pattern=re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b"),
         token_prefix="PII_CNPJ",
     ),
-    # Ecuadorian Cédula: 10 digits
-    PIIPattern(
-        name="cedula",
-        pattern=re.compile(r"\b\d{10}\b"),
-        token_prefix="PII_CEDULA",
-    ),
-    # Email addresses
+    # Email addresses (checked before phone to avoid partial matches)
     PIIPattern(
         name="email",
         pattern=re.compile(
@@ -64,6 +60,14 @@ PII_PATTERNS: list[PIIPattern] = [
             r"\b(?:\+\d{1,3}[-.\s]?)?\(?\d{2,3}\)?[-.\s]?\d{4,5}[-.\s]?\d{4}\b"
         ),
         token_prefix="PII_PHONE",
+    ),
+    # Ecuadorian Cédula: 10 digits with province code prefix (01-24)
+    # Note: This pattern may have false positives with other 10-digit numbers.
+    # For production, consider using a validation function or context-aware detection.
+    PIIPattern(
+        name="cedula",
+        pattern=re.compile(r"\b(?:0[1-9]|1\d|2[0-4])\d{8}\b"),
+        token_prefix="PII_CEDULA",
     ),
 ]
 

@@ -28,9 +28,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize database pool
     try:
         await create_pool()
-        print(f"Database pool initialized: {settings.database_url}")
+        # Log without exposing credentials
+        db_host = settings.database_url.split("@")[-1].split("/")[0] if "@" in settings.database_url else "localhost"
+        print(f"Database pool initialized: connected to {db_host}")
     except Exception as e:
-        print(f"Warning: Database connection failed: {e}")
+        print(f"Warning: Database connection failed: {type(e).__name__}")
         print("Running without database - audit logs will be skipped")
 
     yield

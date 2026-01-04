@@ -8,8 +8,8 @@ Provides endpoints for:
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field, field_validator
 
 from src.agents.ticket_triage import TicketInput, TriageResult, run_triage
 from src.core.security import SecurityContext, get_security_context
@@ -22,12 +22,53 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 class TicketRequest(BaseModel):
     """Request body for ticket triage."""
 
-    ticket_id: str = Field(..., description="Unique ticket identifier")
-    subject: str = Field(..., description="Ticket subject line")
-    body: str = Field(..., description="Ticket body content")
-    customer_email: str | None = Field(None, description="Customer email address")
-    source: str = Field("email", description="Ticket source (email, chat, phone)")
+    ticket_id: str = Field(
+        ...,
+        description="Unique ticket identifier",
+        min_length=1,
+        max_length=100,
+    )
+    subject: str = Field(
+        ...,
+        description="Ticket subject line",
+        min_length=1,
+        max_length=500,
+    )
+    body: str = Field(
+        ...,
+        description="Ticket body content",
+        min_length=1,
+        max_length=50000,
+    )
+    customer_email: str | None = Field(
+        None,
+        description="Customer email address",
+        max_length=255,
+    )
+    source: str = Field(
+        "email",
+        description="Ticket source (email, chat, phone)",
+        max_length=50,
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("ticket_id")
+    @classmethod
+    def validate_ticket_id(cls, v: str) -> str:
+        """Validate ticket ID format."""
+        # Remove any null bytes or control characters
+        if "\x00" in v or any(ord(c) < 32 for c in v):
+            raise ValueError("Ticket ID contains invalid characters")
+        return v.strip()
+
+    @field_validator("source")
+    @classmethod
+    def validate_source(cls, v: str) -> str:
+        """Validate source is from allowed values."""
+        allowed_sources = {"email", "chat", "phone", "web", "api", "internal"}
+        if v.lower() not in allowed_sources:
+            raise ValueError(f"Source must be one of: {', '.join(allowed_sources)}")
+        return v.lower()
 
 
 class TriageResponse(BaseModel):

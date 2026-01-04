@@ -1,0 +1,21 @@
+# CodeQL Configuration for Good AI Enterprise Reference
+# https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/codeql-code-scanning-for-compiled-languages
+
+name: "Good AI CodeQL Config"
+
+# Disable default queries and use security-extended
+disable-default-queries: false
+
+queries:
+  - uses: security-extended
+  - uses: security-and-quality
+
+# Paths to analyze
+paths:
+  - src
+
+# Paths to ignore
+paths-ignore:
+  - tests
+  - "**/*.test.py"
+  - "**/*_test.py"

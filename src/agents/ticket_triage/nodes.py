@@ -11,7 +11,7 @@ Nodes are composed into a graph in graph.py.
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import asyncpg
@@ -59,7 +59,7 @@ class TriageNodes:
         This is typically the entry point of the workflow.
         """
         return {
-            "started_at": datetime.utcnow(),
+            "started_at": datetime.now(timezone.utc),
         }
 
     async def pii_redact(self, state: TicketState) -> dict[str, Any]:
@@ -250,7 +250,7 @@ class TriageNodes:
             # Skip audit logging if no connection
             return {
                 "audit_log_id": None,
-                "completed_at": datetime.utcnow(),
+                "completed_at": datetime.now(timezone.utc),
             }
 
         try:
@@ -284,23 +284,30 @@ class TriageNodes:
 
             return {
                 "audit_log_id": audit_id,
-                "completed_at": datetime.utcnow(),
+                "completed_at": datetime.now(timezone.utc),
             }
 
         except Exception as e:
             return {
                 "audit_log_id": None,
-                "completed_at": datetime.utcnow(),
+                "completed_at": datetime.now(timezone.utc),
                 "errors": state.errors + [f"Audit log error: {str(e)}"],
             }
 
 
-def should_generate_response(state: TicketState) -> str:
+def should_generate_response(state: TicketState | dict[str, Any]) -> str:
     """
     Conditional edge: Determine if response should be generated.
 
     Returns the next node name based on policy decision.
+
+    Note: LangGraph passes state as dict, so we handle both types.
     """
-    if state.approval_required:
+    if isinstance(state, dict):
+        approval_required = state.get("approval_required", False)
+    else:
+        approval_required = state.approval_required
+
+    if approval_required:
         return "write_audit_log"
     return "generate_response"
