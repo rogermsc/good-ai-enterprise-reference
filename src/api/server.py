@@ -4,15 +4,15 @@ FastAPI application server.
 Main entry point for the Enterprise AI Platform API.
 """
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes import health_router, tickets_router
 from src.core.config import get_settings
-from src.db.connection import create_pool, close_pool
+from src.db.connection import close_pool, create_pool
 
 
 @asynccontextmanager

@@ -6,7 +6,7 @@ This module provides common fixtures and configuration for all tests.
 
 import pytest
 
-from src.core.security import SecurityContext, Roles
+from src.core.security import Roles, SecurityContext
 
 
 @pytest.fixture

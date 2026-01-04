@@ -4,8 +4,8 @@ Database connection management.
 Provides async connection pooling for PostgreSQL using asyncpg.
 """
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import asyncpg
 

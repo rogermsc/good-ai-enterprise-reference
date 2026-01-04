@@ -10,12 +10,12 @@ A LangGraph-based agent for triaging support tickets with:
 - Audit logging
 """
 
+from src.agents.ticket_triage.graph import create_triage_graph, run_triage
 from src.agents.ticket_triage.models import (
     TicketInput,
     TicketState,
     TriageResult,
 )
-from src.agents.ticket_triage.graph import create_triage_graph, run_triage
 
 __all__ = [
     "TicketInput",

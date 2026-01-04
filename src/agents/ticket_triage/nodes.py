@@ -11,7 +11,7 @@ Nodes are composed into a graph in graph.py.
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import asyncpg
@@ -59,7 +59,7 @@ class TriageNodes:
         This is typically the entry point of the workflow.
         """
         return {
-            "started_at": datetime.now(timezone.utc),
+            "started_at": datetime.now(UTC),
         }
 
     async def pii_redact(self, state: TicketState) -> dict[str, Any]:
@@ -131,7 +131,7 @@ class TriageNodes:
         except Exception as e:
             return {
                 "severity": "P3",  # Default on error
-                "errors": state.errors + [f"Classification error: {str(e)}"],
+                "errors": [*state.errors, f"Classification error: {e!s}"],
             }
 
     async def recommend_actions(self, state: TicketState) -> dict[str, Any]:
@@ -166,7 +166,7 @@ class TriageNodes:
         except Exception as e:
             return {
                 "actions": ["classify", "respond"],
-                "errors": state.errors + [f"Action recommendation error: {str(e)}"],
+                "errors": [*state.errors, f"Action recommendation error: {e!s}"],
             }
 
     async def policy_check(self, state: TicketState) -> dict[str, Any]:
@@ -237,7 +237,7 @@ class TriageNodes:
         except Exception as e:
             return {
                 "response": None,
-                "errors": state.errors + [f"Response generation error: {str(e)}"],
+                "errors": [*state.errors, f"Response generation error: {e!s}"],
             }
 
     async def write_audit_log(self, state: TicketState) -> dict[str, Any]:
@@ -250,7 +250,7 @@ class TriageNodes:
             # Skip audit logging if no connection
             return {
                 "audit_log_id": None,
-                "completed_at": datetime.now(timezone.utc),
+                "completed_at": datetime.now(UTC),
             }
 
         try:
@@ -284,14 +284,14 @@ class TriageNodes:
 
             return {
                 "audit_log_id": audit_id,
-                "completed_at": datetime.now(timezone.utc),
+                "completed_at": datetime.now(UTC),
             }
 
         except Exception as e:
             return {
                 "audit_log_id": None,
-                "completed_at": datetime.now(timezone.utc),
-                "errors": state.errors + [f"Audit log error: {str(e)}"],
+                "completed_at": datetime.now(UTC),
+                "errors": [*state.errors, f"Audit log error: {e!s}"],
             }
 
 

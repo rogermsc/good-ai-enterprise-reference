@@ -11,10 +11,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
-from src.agents.ticket_triage import TicketInput, TriageResult, run_triage
-from src.core.security import SecurityContext, get_security_context
+from src.agents.ticket_triage import TicketInput, run_triage
+from src.core.security import get_security_context
 from src.db.connection import get_connection
-
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -183,7 +182,7 @@ async def triage_ticket(
             db_conn=None,
         )
         # Add error to result
-        result.errors.append(f"Database connection failed: {str(e)}")
+        result.errors.append(f"Database connection failed: {e!s}")
 
     # Check if policy denied
     if not result.policy_decision.get("allowed", True):

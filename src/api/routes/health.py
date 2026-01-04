@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from src.core.config import get_settings
 
-
 router = APIRouter(tags=["health"])
 
 

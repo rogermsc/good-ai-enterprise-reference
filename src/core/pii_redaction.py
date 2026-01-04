@@ -17,7 +17,7 @@ Tokenization replaces PII with reversible tokens, enabling:
 
 import re
 from dataclasses import dataclass, field
-from typing import Pattern
+from re import Pattern
 
 
 @dataclass
@@ -162,10 +162,7 @@ class PIIRedactor:
 
     def has_pii(self, text: str) -> bool:
         """Check if text contains any PII patterns."""
-        for pii_pattern in self.patterns:
-            if pii_pattern.pattern.search(text):
-                return True
-        return False
+        return any(pii_pattern.pattern.search(text) for pii_pattern in self.patterns)
 
     def get_pii_summary(self, text: str) -> dict[str, int]:
         """Get count of each PII type found in text."""

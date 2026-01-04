@@ -8,10 +8,9 @@ Tests:
 - Decision aggregation
 """
 
-import pytest
 
-from src.core.policy_engine import PolicyEngine, PolicyDecision, Severity, RiskLevel, Actions
-from src.core.security import SecurityContext, Roles
+from src.core.policy_engine import Actions, PolicyDecision, PolicyEngine, RiskLevel
+from src.core.security import Roles, SecurityContext
 
 
 class TestPolicyEngine:

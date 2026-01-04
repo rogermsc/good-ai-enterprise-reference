@@ -12,7 +12,7 @@ Tests:
 import pytest
 
 from src.agents.ticket_triage import TicketInput, TriageResult, run_triage
-from src.core.security import SecurityContext, Roles
+from src.core.security import Roles, SecurityContext
 
 
 class TestTicketTriageGraph:
