@@ -180,7 +180,7 @@ Recommended actions (JSON array only):"""
         prompt = f"""Generate a professional customer support response for this ticket.
 
 Ticket severity: {severity}
-Actions being taken: {', '.join(actions)}
+Actions being taken: {", ".join(actions)}
 
 Ticket content:
 {ticket_content}
@@ -255,10 +255,7 @@ Customer response:"""
     ) -> float:
         """Estimate API cost based on token usage."""
         costs = COST_PER_1K_TOKENS.get(model, {"input": 0.01, "output": 0.03})
-        return (
-            (input_tokens / 1000) * costs["input"]
-            + (output_tokens / 1000) * costs["output"]
-        )
+        return (input_tokens / 1000) * costs["input"] + (output_tokens / 1000) * costs["output"]
 
     # Mock implementations for testing without API keys
     def _mock_classify_severity(self, content: str) -> LLMResponse:
@@ -268,7 +265,14 @@ Customer response:"""
         # Keyword-based mock classification
         if any(
             word in content_lower
-            for word in ["breach", "data leak", "security", "unauthorized", "production down", "outage"]
+            for word in [
+                "breach",
+                "data leak",
+                "security",
+                "unauthorized",
+                "production down",
+                "outage",
+            ]
         ):
             severity = "P0"
         elif any(
@@ -276,14 +280,10 @@ Customer response:"""
             for word in ["urgent", "broken", "critical", "not working", "error", "crash"]
         ):
             severity = "P1"
-        elif any(
-            word in content_lower
-            for word in ["slow", "issue", "problem", "bug", "degraded"]
-        ):
+        elif any(word in content_lower for word in ["slow", "issue", "problem", "bug", "degraded"]):
             severity = "P2"
         elif any(
-            word in content_lower
-            for word in ["question", "how to", "help", "password", "reset"]
+            word in content_lower for word in ["question", "how to", "help", "password", "reset"]
         ):
             severity = "P3"
         else:
@@ -309,7 +309,9 @@ Customer response:"""
         content_lower = content.lower()
 
         if severity == "P0":
-            actions = '["escalate_to_security", "create_incident", "page_oncall", "notify_customer"]'
+            actions = (
+                '["escalate_to_security", "create_incident", "page_oncall", "notify_customer"]'
+            )
         elif severity == "P1":
             actions = '["escalate_to_engineering", "create_incident", "notify_customer"]'
         elif severity == "P2":

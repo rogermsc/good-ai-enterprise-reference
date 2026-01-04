@@ -256,10 +256,7 @@ class PolicyEngine:
                 allowed_actions.update(self.role_permissions[role])
 
         # Check for unauthorized actions
-        unauthorized = [
-            action for action in proposed_actions
-            if action not in allowed_actions
-        ]
+        unauthorized = [action for action in proposed_actions if action not in allowed_actions]
 
         if unauthorized:
             return PolicyDecision(
@@ -281,10 +278,7 @@ class PolicyEngine:
         proposed_actions: Sequence[str],
     ) -> PolicyDecision:
         """Check action-specific approval requirements."""
-        approval_needed = [
-            action for action in proposed_actions
-            if action in self.approval_actions
-        ]
+        approval_needed = [action for action in proposed_actions if action in self.approval_actions]
 
         if approval_needed:
             return PolicyDecision(

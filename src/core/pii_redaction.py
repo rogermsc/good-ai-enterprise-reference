@@ -48,17 +48,13 @@ PII_PATTERNS: list[PIIPattern] = [
     # Email addresses (checked before phone to avoid partial matches)
     PIIPattern(
         name="email",
-        pattern=re.compile(
-            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
-        ),
+        pattern=re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
         token_prefix="PII_EMAIL",
     ),
     # Phone numbers (various formats)
     PIIPattern(
         name="phone",
-        pattern=re.compile(
-            r"\b(?:\+\d{1,3}[-.\s]?)?\(?\d{2,3}\)?[-.\s]?\d{4,5}[-.\s]?\d{4}\b"
-        ),
+        pattern=re.compile(r"\b(?:\+\d{1,3}[-.\s]?)?\(?\d{2,3}\)?[-.\s]?\d{4,5}[-.\s]?\d{4}\b"),
         token_prefix="PII_PHONE",
     ),
     # Ecuadorian Cédula: 10 digits with province code prefix (01-24)
@@ -131,9 +127,7 @@ class PIIRedactor:
 
                 token_map[token] = original_value
                 redacted_text = (
-                    redacted_text[: match.start()]
-                    + token
-                    + redacted_text[match.end():]
+                    redacted_text[: match.start()] + token + redacted_text[match.end() :]
                 )
 
         return RedactionResult(

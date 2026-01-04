@@ -81,11 +81,7 @@ def get_security_context(request: Request) -> SecurityContext:
         )
 
     # Parse roles from comma-separated header
-    roles = tuple(
-        role.strip()
-        for role in roles_header.split(",")
-        if role.strip()
-    )
+    roles = tuple(role.strip() for role in roles_header.split(",") if role.strip())
 
     return SecurityContext(
         user_id=user_id,

@@ -16,7 +16,6 @@ The workflow:
 7. write_audit_log - Record operation
 """
 
-
 import asyncpg
 from langgraph.graph import END, StateGraph
 

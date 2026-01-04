@@ -117,17 +117,17 @@ class TriageResponse(BaseModel):
                             "allowed": True,
                             "requires_approval": False,
                             "reason": "All policy checks passed",
-                            "risk_level": "low"
+                            "risk_level": "low",
                         },
                         "response": "Thank you for contacting us...",
                         "approval_required": False,
                         "audit_log_id": "550e8400-e29b-41d4-a716-446655440000",
                         "latency_ms": 1250,
                         "cost_estimate": 0.0045,
-                        "errors": []
+                        "errors": [],
                     }
                 }
-            }
+            },
         },
         401: {"description": "Missing authentication headers"},
         403: {"description": "Policy denied the request"},
