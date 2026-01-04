@@ -80,6 +80,9 @@ class JWTService:
         self.refresh_token_expire_days = refresh_token_expire_days
 
         if not self.secret_key:
+            settings = get_settings()
+            if settings.environment == "production":
+                raise ValueError("JWT_SECRET_KEY must be configured in production environment")
             logger.warning(
                 "jwt_secret_not_configured",
                 message="Using random secret - tokens won't survive restart",

@@ -103,6 +103,11 @@ def create_app() -> FastAPI:
     )
 
     # Configure CORS
+    if settings.environment == "production" and "*" in settings.cors_origins:
+        logger.warning(
+            "cors_wildcard_in_production",
+            message="CORS allows all origins in production - configure specific origins",
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

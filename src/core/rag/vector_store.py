@@ -4,6 +4,7 @@ Vector store using PostgreSQL with pgvector extension.
 Provides document storage and semantic search capabilities.
 """
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -14,6 +15,9 @@ from pgvector.asyncpg import register_vector
 
 from src.core.observability import get_logger, get_tracer
 from src.core.rag.embeddings import EmbeddingService
+
+# Pattern for safe metadata keys (alphanumeric and underscores only)
+SAFE_KEY_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 logger = get_logger()
 tracer = get_tracer()
@@ -289,6 +293,14 @@ class VectorStore:
 
             if metadata_filter:
                 for key, value in metadata_filter.items():
+                    # Validate key to prevent SQL injection
+                    if not SAFE_KEY_PATTERN.match(key):
+                        logger.warning(
+                            "invalid_metadata_key",
+                            key=key,
+                            reason="Key must be alphanumeric with underscores",
+                        )
+                        continue
                     conditions.append(f"metadata->>'{key}' = ${param_idx}")
                     params.append(str(value))
                     param_idx += 1
