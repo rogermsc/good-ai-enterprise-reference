@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 100
     rate_limit_window_seconds: int = 60
 
+    # Observability
+    otlp_endpoint: str | None = None  # e.g., "http://localhost:4317"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    enable_tracing: bool = True
+
     @property
     def is_mock_mode(self) -> bool:
         """Check if running in mock mode (no real LLM calls)."""

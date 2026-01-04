@@ -35,6 +35,14 @@ dependencies = [
     "httpx>=0.26.0",
     "langgraph>=0.0.40",
     "python-dotenv>=1.0.0",
+    # Observability
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
+    "opentelemetry-instrumentation-httpx>=0.43b0",
+    "opentelemetry-instrumentation-asyncpg>=0.43b0",
+    "opentelemetry-exporter-otlp>=1.22.0",
+    "structlog>=24.1.0",
 ]
 
 [project.optional-dependencies]

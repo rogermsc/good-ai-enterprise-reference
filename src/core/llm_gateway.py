@@ -14,8 +14,20 @@ import time
 from dataclasses import dataclass
 
 import httpx
+from opentelemetry import trace
 
 from src.core.config import Settings, get_settings
+from src.core.observability import (
+    get_logger,
+    get_tracer,
+    llm_cost_counter,
+    llm_request_counter,
+    llm_request_duration,
+    llm_token_counter,
+)
+
+logger = get_logger()
+tracer = get_tracer()
 
 
 @dataclass
@@ -113,7 +125,7 @@ Ticket content:
 
 Severity:"""
 
-        return await self._complete(prompt)
+        return await self._complete(prompt, operation="classify_severity")
 
     async def recommend_actions(
         self,
@@ -155,7 +167,7 @@ Ticket content:
 
 Recommended actions (JSON array only):"""
 
-        return await self._complete(prompt)
+        return await self._complete(prompt, operation="recommend_actions")
 
     async def generate_response(
         self,
@@ -195,57 +207,99 @@ Guidelines:
 
 Customer response:"""
 
-        return await self._complete(prompt)
+        return await self._complete(prompt, operation="generate_response")
 
-    async def _complete(self, prompt: str) -> LLMResponse:
-        """Make LLM API call."""
-        start_time = time.time()
+    async def _complete(self, prompt: str, operation: str = "complete") -> LLMResponse:
+        """Make LLM API call with tracing and metrics."""
+        with tracer.start_as_current_span(f"llm.{operation}") as span:
+            start_time = time.time()
 
-        client = await self._get_client()
+            # Set span attributes
+            span.set_attribute("llm.provider", self.settings.llm_provider)
+            span.set_attribute("llm.model", self.settings.model_name)
+            span.set_attribute("llm.operation", operation)
 
-        headers = {
-            "Authorization": f"Bearer {self.settings.openai_api_key}",
-            "Content-Type": "application/json",
-        }
+            client = await self._get_client()
 
-        payload = {
-            "model": self.settings.model_name,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-            "max_tokens": 500,
-        }
+            headers = {
+                "Authorization": f"Bearer {self.settings.openai_api_key}",
+                "Content-Type": "application/json",
+            }
 
-        response = await client.post(
-            f"{self.settings.openai_base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-        )
-        response.raise_for_status()
+            payload = {
+                "model": self.settings.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 500,
+            }
 
-        data = response.json()
-        latency_ms = int((time.time() - start_time) * 1000)
+            try:
+                response = await client.post(
+                    f"{self.settings.openai_base_url}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
+                response.raise_for_status()
 
-        content = data["choices"][0]["message"]["content"]
-        usage = data.get("usage", {})
-        input_tokens = usage.get("prompt_tokens", 0)
-        output_tokens = usage.get("completion_tokens", 0)
+                data = response.json()
+                latency_ms = int((time.time() - start_time) * 1000)
 
-        cost = self._estimate_cost(
-            self.settings.model_name,
-            input_tokens,
-            output_tokens,
-        )
+                content = data["choices"][0]["message"]["content"]
+                usage = data.get("usage", {})
+                input_tokens = usage.get("prompt_tokens", 0)
+                output_tokens = usage.get("completion_tokens", 0)
 
-        return LLMResponse(
-            content=content.strip(),
-            model=self.settings.model_name,
-            provider=self.settings.llm_provider,
-            latency_ms=latency_ms,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cost_estimate=cost,
-            is_mock=False,
-        )
+                cost = self._estimate_cost(
+                    self.settings.model_name,
+                    input_tokens,
+                    output_tokens,
+                )
+
+                # Record metrics
+                labels = {"model": self.settings.model_name, "operation": operation}
+                llm_request_counter.add(1, {**labels, "status": "success"})
+                llm_request_duration.record(latency_ms, labels)
+                llm_token_counter.add(input_tokens, {**labels, "type": "input"})
+                llm_token_counter.add(output_tokens, {**labels, "type": "output"})
+                llm_cost_counter.add(cost, labels)
+
+                # Add response details to span
+                span.set_attribute("llm.latency_ms", latency_ms)
+                span.set_attribute("llm.input_tokens", input_tokens)
+                span.set_attribute("llm.output_tokens", output_tokens)
+                span.set_attribute("llm.cost_estimate", cost)
+                span.set_status(trace.Status(trace.StatusCode.OK))
+
+                logger.info(
+                    "llm_request_completed",
+                    operation=operation,
+                    model=self.settings.model_name,
+                    latency_ms=latency_ms,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cost=cost,
+                )
+
+                return LLMResponse(
+                    content=content.strip(),
+                    model=self.settings.model_name,
+                    provider=self.settings.llm_provider,
+                    latency_ms=latency_ms,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cost_estimate=cost,
+                    is_mock=False,
+                )
+
+            except Exception as e:
+                llm_request_counter.add(
+                    1,
+                    {"model": self.settings.model_name, "operation": operation, "status": "error"},
+                )
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                span.record_exception(e)
+                logger.error("llm_request_failed", operation=operation, error=str(e))
+                raise
 
     def _estimate_cost(
         self,

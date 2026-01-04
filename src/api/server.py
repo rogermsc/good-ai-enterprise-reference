@@ -12,7 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes import health_router, tickets_router
 from src.core.config import get_settings
+from src.core.observability import get_logger, instrument_app, setup_observability
 from src.db.connection import close_pool, create_pool
+
+# Initialize observability early
+setup_observability()
+logger = get_logger()
 
 
 @asynccontextmanager
@@ -25,6 +30,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     settings = get_settings()
 
+    logger.info("application_starting", environment=settings.environment)
+
     # Initialize database pool
     try:
         await create_pool()
@@ -34,16 +41,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if "@" in settings.database_url
             else "localhost"
         )
-        print(f"Database pool initialized: connected to {db_host}")
+        logger.info("database_pool_initialized", host=db_host)
     except Exception as e:
-        print(f"Warning: Database connection failed: {type(e).__name__}")
-        print("Running without database - audit logs will be skipped")
+        logger.warning(
+            "database_connection_failed",
+            error_type=type(e).__name__,
+            message="Running without database - audit logs will be skipped",
+        )
 
     yield
 
     # Shutdown
     await close_pool()
-    print("Database pool closed")
+    logger.info("application_shutdown")
 
 
 def create_app() -> FastAPI:
@@ -104,6 +114,11 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health_router)
     app.include_router(tickets_router)
+
+    # Instrument with OpenTelemetry
+    if settings.enable_tracing:
+        instrument_app(app)
+        logger.info("opentelemetry_instrumentation_enabled")
 
     return app
 
