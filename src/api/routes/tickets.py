@@ -4,15 +4,20 @@ Ticket triage API endpoints.
 Provides endpoints for:
 - Submitting tickets for triage
 - Retrieving triage results
+- Streaming triage responses (SSE)
 """
 
+from collections.abc import AsyncGenerator
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse as FastAPIStreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from src.agents.ticket_triage import TicketInput, run_triage
 from src.core.security import get_security_context
+from src.core.streaming import SSEEventType, StreamingResponse
 from src.db.connection import get_connection
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -232,3 +237,138 @@ async def get_triage_result(
         "ticket_id": ticket_id,
         "tenant_id": security_context.tenant_id,
     }
+
+
+@router.post(
+    "/triage/stream",
+    summary="Stream ticket triage (SSE)",
+    description="""
+    Submit a support ticket for AI-powered triage with streaming response.
+
+    Returns Server-Sent Events (SSE) stream with:
+    - progress: Updates on each processing stage
+    - token: Individual tokens as they are generated
+    - done: Final result with metadata
+    - error: Error information if something fails
+
+    **Event format:**
+    ```
+    event: progress
+    data: {"status": "pii_redaction", "node": "pii_redact"}
+
+    event: token
+    data: {"token": "Thank "}
+
+    event: done
+    data: {"status": "complete", "severity": "P2", "latency_ms": 1250}
+    ```
+
+    **Authentication:** Requires X-User-Id, X-Tenant-Id, and X-Roles headers.
+    """,
+    response_class=FastAPIStreamingResponse,
+    responses={
+        200: {
+            "description": "SSE stream of triage events",
+            "content": {"text/event-stream": {}},
+        },
+        401: {"description": "Missing authentication headers"},
+    },
+)
+async def triage_ticket_stream(
+    request: Request,
+    ticket: TicketRequest,
+) -> FastAPIStreamingResponse:
+    """
+    Stream ticket triage as Server-Sent Events.
+
+    Provides real-time updates during triage:
+    - Progress events for each workflow stage
+    - Token events for streaming response
+    - Done event with final metadata
+    """
+    # Get security context from headers
+    try:
+        security_context = get_security_context(request)
+    except HTTPException:
+        raise
+
+    request_id = str(uuid4())
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        """Generate SSE events for triage workflow."""
+        stream = StreamingResponse(request_id)
+
+        # Convert request to agent input
+        ticket_input = TicketInput(
+            ticket_id=ticket.ticket_id,
+            subject=ticket.subject,
+            body=ticket.body,
+            customer_email=ticket.customer_email,
+            source=ticket.source,
+            metadata=ticket.metadata,
+        )
+
+        yield stream.progress("starting", message="Initializing triage")
+
+        try:
+            # Run triage with database connection
+            yield stream.progress("connecting_db", message="Connecting to database")
+
+            try:
+                async with get_connection() as conn:
+                    yield stream.progress("pii_redaction", message="Redacting PII")
+                    yield stream.progress("classification", message="Classifying severity")
+                    yield stream.progress("policy_check", message="Checking policy")
+
+                    result = await run_triage(
+                        ticket=ticket_input,
+                        security_context=security_context,
+                        db_conn=conn,
+                    )
+            except Exception:
+                yield stream.progress("db_fallback", message="Running without database")
+                result = await run_triage(
+                    ticket=ticket_input,
+                    security_context=security_context,
+                    db_conn=None,
+                )
+
+            # Stream response tokens if available
+            if result.response:
+                yield stream.progress("generating_response", message="Generating response")
+                words = result.response.split()
+                for i, word in enumerate(words):
+                    token = word + (" " if i < len(words) - 1 else "")
+                    yield stream.token(token)
+
+            # Send final result
+            yield stream.done(
+                {
+                    "status": "complete",
+                    "ticket_id": result.ticket_id,
+                    "severity": result.severity,
+                    "actions": result.actions,
+                    "policy_decision": result.policy_decision,
+                    "approval_required": result.approval_required,
+                    "audit_log_id": result.audit_log_id,
+                    "latency_ms": result.latency_ms,
+                    "cost_estimate": result.cost_estimate,
+                    "errors": result.errors,
+                }
+            )
+
+        except Exception as e:
+            yield stream.event(
+                SSEEventType.ERROR,
+                {"error": str(e), "code": "TRIAGE_ERROR"},
+            )
+
+    return FastAPIStreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
