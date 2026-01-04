@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["*"]
     rate_limit_requests: int = 100
     rate_limit_window_seconds: int = 60
+    rate_limit_burst: int = 20
+
+    # Redis (for rate limiting and caching)
+    redis_url: str = "redis://localhost:6379"
 
     # JWT Authentication
     jwt_secret_key: str | None = None  # Required for production
