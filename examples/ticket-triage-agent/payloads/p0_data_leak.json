@@ -1,0 +1,11 @@
+{
+  "ticket_id": "TKT-2026-001",
+  "subject": "URGENT: Suspected data breach - customer data exposed",
+  "body": "We have detected unauthorized access to our production database. Customer records may have been exposed including CPF numbers. One affected customer: Maria Silva, CPF: 123.456.789-00, email: maria.silva@example.com. This requires immediate investigation by security team.",
+  "customer_email": "security-alert@company.com",
+  "source": "internal",
+  "metadata": {
+    "priority": "critical",
+    "department": "security"
+  }
+}

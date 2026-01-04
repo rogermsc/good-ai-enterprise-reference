@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # FastAPI Application
+  api:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile
+    container_name: goodai-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/goodai
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - MODEL_NAME=${MODEL_NAME:-gpt-4}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - goodai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # PostgreSQL with pgvector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: goodai-postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=goodai
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/02-init.sql:ro
+    networks:
+      - goodai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d goodai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  goodai-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local

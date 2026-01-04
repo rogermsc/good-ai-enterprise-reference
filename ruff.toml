@@ -1,0 +1,66 @@
+# Ruff configuration for Good AI Enterprise Reference
+# https://docs.astral.sh/ruff/
+
+# Target Python 3.11
+target-version = "py311"
+
+# Line length
+line-length = 100
+
+# Exclude common directories
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+
+[lint]
+# Enable rules
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "PTH",    # flake8-use-pathlib
+    "ERA",    # eradicate (commented-out code)
+    "RUF",    # Ruff-specific rules
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "B008",   # Do not perform function calls in argument defaults
+    "B904",   # Within an `except` clause, raise exceptions with `raise ... from err`
+    "ARG001", # Unused function argument
+    "ARG002", # Unused method argument
+]
+
+# Allow autofix for all rules
+fixable = ["ALL"]
+unfixable = []
+
+[lint.per-file-ignores]
+# Tests can use magic values and assertions
+"tests/**/*.py" = ["S101", "PLR2004"]
+
+[lint.isort]
+# Import sorting configuration
+known-first-party = ["src"]
+force-single-line = false
+combine-as-imports = true
+
+[format]
+# Formatting options
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

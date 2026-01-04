@@ -1,0 +1,11 @@
+{
+  "ticket_id": "TKT-2026-003",
+  "subject": "Question about export feature",
+  "body": "Hi there! I was wondering how I can export my data to CSV format. I see there's an export button but I'm not sure which options to select. Could you provide some guidance on the best format for importing into Excel?",
+  "customer_email": "curious.user@example.com",
+  "source": "chat",
+  "metadata": {
+    "product": "analytics-dashboard",
+    "user_tier": "premium"
+  }
+}

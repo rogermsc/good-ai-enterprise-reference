@@ -1,0 +1,27 @@
+# Good AI Enterprise Reference - Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+* @rogermsc
+
+# Core Trust Layer
+/src/core/ @rogermsc
+
+# Agent implementations
+/src/agents/ @rogermsc
+
+# API layer
+/src/api/ @rogermsc
+
+# Infrastructure
+/infrastructure/ @rogermsc
+
+# Documentation
+/docs/ @rogermsc
+
+# CI/CD
+/.github/ @rogermsc
+
+# Security-sensitive files
+/SECURITY.md @rogermsc
+/.github/workflows/security-scan.yml @rogermsc
