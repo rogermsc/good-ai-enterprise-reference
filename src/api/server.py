@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import auth_router, health_router, tickets_router
+from src.api.routes import approvals_router, auth_router, health_router, tickets_router
 from src.core.config import get_settings
 from src.core.observability import get_logger, instrument_app, setup_observability
 from src.db.connection import close_pool, create_pool
@@ -117,6 +117,7 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
+    app.include_router(approvals_router)
     app.include_router(auth_router)
     app.include_router(health_router)
     app.include_router(tickets_router)
