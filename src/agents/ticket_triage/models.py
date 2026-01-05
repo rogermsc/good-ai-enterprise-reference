@@ -64,6 +64,7 @@ class TicketState(BaseModel):
     # Response state
     response: str | None = None
     approval_required: bool = False
+    approval_id: str | None = None  # ID of pending approval request if required
 
     # Guardrail state
     guardrail_passed: bool | None = None
@@ -102,6 +103,7 @@ class TriageResult(BaseModel):
     policy_decision: dict[str, Any]
     response: str | None
     approval_required: bool
+    approval_id: str | None = None  # ID of pending approval request if required
     audit_log_id: str | None
     latency_ms: int
     cost_estimate: float
@@ -124,6 +126,7 @@ class TriageResult(BaseModel):
             },
             response=state.response,
             approval_required=state.approval_required,
+            approval_id=state.approval_id,
             audit_log_id=state.audit_log_id,
             latency_ms=state.total_latency_ms,
             cost_estimate=state.total_cost_estimate,

@@ -17,6 +17,7 @@ from typing import Any
 import asyncpg
 
 from src.agents.ticket_triage.models import TicketState
+from src.core.approvals import ApprovalManager, ApprovalPriority, get_approval_manager
 from src.core.audit_log import AuditLogger, AuditLogPayload
 from src.core.config import get_settings
 from src.core.guardrails import GuardrailAction, GuardrailPipeline
@@ -24,6 +25,7 @@ from src.core.llm_gateway import LLMGateway
 from src.core.pii_redaction import PIIRedactor
 from src.core.policy_engine import PolicyEngine
 from src.core.security import SecurityContext
+from src.core.webhooks import WebhookEventType, WebhookManager, get_webhook_manager
 
 
 class TriageNodes:
@@ -37,6 +39,8 @@ class TriageNodes:
         self,
         security_context: SecurityContext,
         db_conn: asyncpg.Connection | None = None,
+        approval_manager: ApprovalManager | None = None,
+        webhook_manager: WebhookManager | None = None,
     ):
         """
         Initialize nodes with dependencies.
@@ -44,6 +48,8 @@ class TriageNodes:
         Args:
             security_context: User authentication context
             db_conn: Optional database connection for audit logging
+            approval_manager: Manager for approval workflow
+            webhook_manager: Manager for webhook notifications
         """
         self.security_context = security_context
         self.db_conn = db_conn
@@ -53,6 +59,8 @@ class TriageNodes:
         self.llm_gateway = LLMGateway(self.settings)
         self.audit_logger = AuditLogger()
         self.guardrail_pipeline = GuardrailPipeline()
+        self.approval_manager = approval_manager or get_approval_manager()
+        self.webhook_manager = webhook_manager or get_webhook_manager()
 
     async def ingest_ticket(self, state: TicketState) -> dict[str, Any]:
         """
@@ -176,6 +184,7 @@ class TriageNodes:
         Node: Evaluate proposed actions against policy engine.
 
         This is the critical security gate - all actions must pass policy.
+        If approval is required, creates an ApprovalRequest for human review.
         """
         severity = state.severity or "P3"
         actions = state.actions or []
@@ -186,13 +195,59 @@ class TriageNodes:
             user_context=self.security_context,
         )
 
-        return {
+        result: dict[str, Any] = {
             "policy_allowed": decision.allowed,
             "policy_requires_approval": decision.requires_approval,
             "policy_reason": decision.reason,
             "policy_risk_level": decision.risk_level,
             "approval_required": decision.requires_approval,
         }
+
+        # Create approval request if required
+        if decision.requires_approval:
+            # Map severity to approval priority
+            priority_map = {
+                "P0": ApprovalPriority.CRITICAL,
+                "P1": ApprovalPriority.HIGH,
+                "P2": ApprovalPriority.MEDIUM,
+                "P3": ApprovalPriority.LOW,
+                "P4": ApprovalPriority.LOW,
+            }
+            priority = priority_map.get(severity, ApprovalPriority.MEDIUM)
+
+            approval = self.approval_manager.create_request(
+                request_type="ticket_response",
+                action=f"Generate response for {severity} ticket",
+                context={
+                    "ticket_id": state.ticket_id,
+                    "severity": severity,
+                    "proposed_actions": actions,
+                    "policy_reason": decision.reason,
+                    "risk_level": decision.risk_level,
+                },
+                requester=self.security_context,
+                priority=priority,
+                metadata={
+                    "redacted_subject": state.redacted_subject,
+                    "source": state.source,
+                },
+            )
+            result["approval_id"] = approval.id
+
+            # Trigger webhook for approval request
+            await self.webhook_manager.trigger_event(
+                event_type=WebhookEventType.APPROVAL_REQUESTED,
+                tenant_id=self.security_context.tenant_id,
+                payload={
+                    "approval_id": approval.id,
+                    "ticket_id": state.ticket_id,
+                    "severity": severity,
+                    "priority": priority.value,
+                    "reason": decision.reason,
+                },
+            )
+
+        return result
 
     async def generate_response(self, state: TicketState) -> dict[str, Any]:
         """
@@ -289,57 +344,86 @@ class TriageNodes:
 
     async def write_audit_log(self, state: TicketState) -> dict[str, Any]:
         """
-        Node: Write audit log entry.
+        Node: Write audit log entry and trigger completion webhook.
 
         Records all operation details for compliance.
+        Triggers TICKET_TRIAGED webhook for external system integration.
         """
-        if self.db_conn is None:
-            # Skip audit logging if no connection
-            return {
-                "audit_log_id": None,
-                "completed_at": datetime.now(UTC),
-            }
+        audit_id = None
+        completed_at = datetime.now(UTC)
 
-        try:
-            payload = AuditLogPayload(
-                ticket_id=state.ticket_id,
-                user_id=self.security_context.user_id,
+        # Write audit log if database connection available
+        if self.db_conn is not None:
+            try:
+                payload = AuditLogPayload(
+                    ticket_id=state.ticket_id,
+                    user_id=self.security_context.user_id,
+                    tenant_id=self.security_context.tenant_id,
+                    redacted_input=state.redacted_content,
+                    token_map=state.token_map,
+                    model_name=self.settings.model_name,
+                    provider=self.settings.llm_provider,
+                    severity=state.severity or "unknown",
+                    actions=state.actions,
+                    policy_decision={
+                        "allowed": state.policy_allowed,
+                        "requires_approval": state.policy_requires_approval,
+                        "reason": state.policy_reason,
+                        "risk_level": state.policy_risk_level,
+                    },
+                    final_response=state.response,
+                    latency_ms=state.total_latency_ms,
+                    cost_estimate=state.total_cost_estimate,
+                    metadata={
+                        "pii_found": state.pii_found,
+                        "llm_calls": state.llm_calls,
+                        "errors": state.errors,
+                    },
+                )
+
+                audit_id = await self.audit_logger.write(self.db_conn, payload)
+
+            except Exception as e:
+                return {
+                    "audit_log_id": None,
+                    "completed_at": completed_at,
+                    "errors": [*state.errors, f"Audit log error: {e!s}"],
+                }
+
+        # Trigger TICKET_TRIAGED webhook
+        await self.webhook_manager.trigger_event(
+            event_type=WebhookEventType.TICKET_TRIAGED,
+            tenant_id=self.security_context.tenant_id,
+            payload={
+                "ticket_id": state.ticket_id,
+                "severity": state.severity,
+                "actions": state.actions,
+                "approval_required": state.approval_required,
+                "approval_id": getattr(state, "approval_id", None),
+                "response_generated": state.response is not None,
+                "latency_ms": state.total_latency_ms,
+                "errors": state.errors if state.errors else None,
+            },
+        )
+
+        # Trigger escalation webhook if high severity
+        if state.severity in ("P0", "P1"):
+            await self.webhook_manager.trigger_event(
+                event_type=WebhookEventType.TICKET_ESCALATED,
                 tenant_id=self.security_context.tenant_id,
-                redacted_input=state.redacted_content,
-                token_map=state.token_map,
-                model_name=self.settings.model_name,
-                provider=self.settings.llm_provider,
-                severity=state.severity or "unknown",
-                actions=state.actions,
-                policy_decision={
-                    "allowed": state.policy_allowed,
-                    "requires_approval": state.policy_requires_approval,
+                payload={
+                    "ticket_id": state.ticket_id,
+                    "severity": state.severity,
+                    "approval_required": state.approval_required,
+                    "approval_id": getattr(state, "approval_id", None),
                     "reason": state.policy_reason,
-                    "risk_level": state.policy_risk_level,
-                },
-                final_response=state.response,
-                latency_ms=state.total_latency_ms,
-                cost_estimate=state.total_cost_estimate,
-                metadata={
-                    "pii_found": state.pii_found,
-                    "llm_calls": state.llm_calls,
-                    "errors": state.errors,
                 },
             )
 
-            audit_id = await self.audit_logger.write(self.db_conn, payload)
-
-            return {
-                "audit_log_id": audit_id,
-                "completed_at": datetime.now(UTC),
-            }
-
-        except Exception as e:
-            return {
-                "audit_log_id": None,
-                "completed_at": datetime.now(UTC),
-                "errors": [*state.errors, f"Audit log error: {e!s}"],
-            }
+        return {
+            "audit_log_id": audit_id,
+            "completed_at": completed_at,
+        }
 
 
 def should_generate_response(state: TicketState | dict[str, Any]) -> str:
