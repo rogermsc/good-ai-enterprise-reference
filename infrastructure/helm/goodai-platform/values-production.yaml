@@ -1,0 +1,120 @@
+# Production values for Good AI Platform
+# Use with: helm install goodai ./goodai-platform -f values-production.yaml
+
+global:
+  environment: production
+  imageRegistry: "your-registry.example.com/"
+  imagePullSecrets:
+    - name: registry-credentials
+
+api:
+  replicaCount: 5
+
+  image:
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+    limits:
+      cpu: 4000m
+      memory: 4Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 5
+    maxReplicas: 50
+    targetCPUUtilizationPercentage: 60
+    targetMemoryUtilizationPercentage: 70
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 3
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: 100m
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+      nginx.ingress.kubernetes.io/limit-rps: "100"
+      nginx.ingress.kubernetes.io/limit-connections: "50"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: api.goodai.yourcompany.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: goodai-api-tls
+        hosts:
+          - api.goodai.yourcompany.com
+
+config:
+  logLevel: INFO
+  logFormat: json
+  llmProvider: openai
+  modelName: gpt-4
+  rateLimitRequestsPerMinute: 120
+  rateLimitTokensPerMinute: 50000
+  cacheEnabled: true
+  cacheTtlSeconds: 7200
+  otelEndpoint: http://otel-collector.monitoring:4317
+
+# Use external secrets in production
+externalSecrets:
+  enabled: true
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+
+networkPolicy:
+  enabled: true
+
+postgresql:
+  enabled: true
+  auth:
+    database: goodai
+    username: goodai
+    existingSecret: goodai-postgresql-secret
+  primary:
+    persistence:
+      enabled: true
+      size: 200Gi
+      storageClass: fast-ssd
+    resources:
+      requests:
+        cpu: 2000m
+        memory: 4Gi
+      limits:
+        cpu: 8000m
+        memory: 16Gi
+
+redis:
+  enabled: true
+  architecture: replication
+  auth:
+    enabled: true
+    existingSecret: goodai-redis-secret
+  master:
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: fast-ssd
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+  replica:
+    replicaCount: 3
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: fast-ssd

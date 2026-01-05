@@ -1,0 +1,10 @@
+---
+# Namespace for Good AI Enterprise Platform
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: goodai-platform
+  labels:
+    app.kubernetes.io/name: goodai-platform
+    app.kubernetes.io/part-of: goodai
+    environment: production

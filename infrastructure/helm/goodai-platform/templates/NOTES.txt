@@ -1,0 +1,51 @@
+🎉 Good AI Platform has been deployed!
+
+============================================
+    Good AI Enterprise Platform
+============================================
+
+1. Get the application URL:
+{{- if .Values.api.ingress.enabled }}
+{{- range $host := .Values.api.ingress.hosts }}
+  https://{{ $host.host }}
+{{- end }}
+{{- else if contains "NodePort" .Values.api.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "goodai-platform.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.api.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        Watch status with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "goodai-platform.fullname" . }}
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "goodai-platform.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo http://$SERVICE_IP:{{ .Values.api.service.port }}
+{{- else if contains "ClusterIP" .Values.api.service.type }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "goodai-platform.fullname" . }} 8080:{{ .Values.api.service.port }}
+  echo "Visit http://127.0.0.1:8080"
+{{- end }}
+
+2. Check deployment status:
+   kubectl get pods -n {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "goodai-platform.name" . }}"
+
+3. View logs:
+   kubectl logs -n {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "goodai-platform.name" . }}" -f
+
+4. Health check:
+   curl -s https://{{ (index .Values.api.ingress.hosts 0).host }}/health | jq
+
+5. API Documentation:
+   https://{{ (index .Values.api.ingress.hosts 0).host }}/docs
+
+============================================
+    Security Reminders
+============================================
+{{- if not .Values.externalSecrets.enabled }}
+⚠️  WARNING: You are not using external secrets management.
+    For production, enable externalSecrets and configure a secret store.
+{{- end }}
+
+- Ensure all secrets are rotated regularly
+- Monitor the audit logs for suspicious activity
+- Review network policies are correctly configured
+- Keep the platform updated with security patches
+
+For documentation, visit: https://github.com/example/goodai-platform

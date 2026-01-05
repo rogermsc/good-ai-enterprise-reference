@@ -1,0 +1,13 @@
+{{- if .Values.api.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "goodai-platform.fullname" . }}
+  labels:
+    {{- include "goodai-platform.api.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.api.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "goodai-platform.api.selectorLabels" . | nindent 6 }}
+{{- end }}

@@ -1,0 +1,40 @@
+---
+# API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: goodai-api
+  namespace: goodai-platform
+  labels:
+    app.kubernetes.io/name: goodai-api
+    app.kubernetes.io/part-of: goodai
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: goodai-api
+
+---
+# Headless service for direct pod access (useful for debugging)
+apiVersion: v1
+kind: Service
+metadata:
+  name: goodai-api-headless
+  namespace: goodai-platform
+  labels:
+    app.kubernetes.io/name: goodai-api
+    app.kubernetes.io/part-of: goodai
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: goodai-api

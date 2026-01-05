@@ -1,0 +1,35 @@
+---
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: goodai-api-config
+  namespace: goodai-platform
+  labels:
+    app.kubernetes.io/name: goodai-api
+    app.kubernetes.io/part-of: goodai
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+
+  # LLM Configuration
+  LLM_PROVIDER: "openai"
+  MODEL_NAME: "gpt-4"
+
+  # Rate Limiting
+  RATE_LIMIT_REQUESTS_PER_MINUTE: "60"
+  RATE_LIMIT_TOKENS_PER_MINUTE: "10000"
+
+  # Cache Configuration
+  CACHE_ENABLED: "true"
+  CACHE_TTL_SECONDS: "3600"
+
+  # Observability
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+  OTEL_SERVICE_NAME: "goodai-api"
+
+  # Server Configuration
+  UVICORN_HOST: "0.0.0.0"
+  UVICORN_PORT: "8000"
+  UVICORN_WORKERS: "4"

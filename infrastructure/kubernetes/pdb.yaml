@@ -1,0 +1,16 @@
+---
+# Pod Disruption Budget to ensure availability during maintenance
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: goodai-api
+  namespace: goodai-platform
+  labels:
+    app.kubernetes.io/name: goodai-api
+    app.kubernetes.io/part-of: goodai
+spec:
+  # Ensure at least 2 pods are always available
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: goodai-api

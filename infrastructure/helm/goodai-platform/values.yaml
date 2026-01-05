@@ -1,0 +1,217 @@
+# Default values for Good AI Platform
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  environment: production
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# API Configuration
+api:
+  replicaCount: 3
+
+  image:
+    repository: goodai/api
+    tag: latest
+    pullPolicy: Always
+
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+
+  # Pod configuration
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  # Probes
+  startupProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+
+  # Service
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8000
+
+  # Ingress
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: 50m
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: api.goodai.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: goodai-api-tls
+        hosts:
+          - api.goodai.example.com
+
+  # Node selection
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: goodai-api
+            topologyKey: kubernetes.io/hostname
+
+# Application Configuration
+config:
+  # Non-sensitive configuration
+  logLevel: INFO
+  logFormat: json
+
+  # LLM Configuration
+  llmProvider: openai
+  modelName: gpt-4
+
+  # Rate Limiting
+  rateLimitRequestsPerMinute: 60
+  rateLimitTokensPerMinute: 10000
+
+  # Cache Configuration
+  cacheEnabled: true
+  cacheTtlSeconds: 3600
+
+  # Observability
+  otelEndpoint: http://otel-collector:4317
+
+# Secrets - Use external secrets management in production
+secrets:
+  # These are placeholders - use external-secrets, vault, or sealed-secrets
+  databaseUrl: ""
+  redisUrl: ""
+  openaiApiKey: ""
+  anthropicApiKey: ""
+  jwtSecretKey: ""
+  piiEncryptionKey: ""
+
+# External Secrets (if using external-secrets-operator)
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+
+# Network Policies
+networkPolicy:
+  enabled: true
+
+# PostgreSQL (Bitnami subchart)
+postgresql:
+  enabled: true
+  auth:
+    database: goodai
+    username: goodai
+    existingSecret: ""
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+  # Enable pgvector extension
+  primary:
+    initdb:
+      scripts:
+        init.sql: |
+          CREATE EXTENSION IF NOT EXISTS vector;
+
+# Redis (Bitnami subchart)
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: ""
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
