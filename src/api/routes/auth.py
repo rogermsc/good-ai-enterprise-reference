@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from src.core.auth import get_jwt_service
+from src.core.config import get_settings
 from src.core.observability import get_logger
 
 logger = get_logger()
@@ -74,6 +75,20 @@ async def create_token(request: TokenRequest) -> TokenResponse:
 
     Returns access and refresh tokens for the provided user.
     """
+    settings = get_settings()
+
+    # SECURITY: Block unauthenticated token generation in production
+    if settings.environment == "production":
+        logger.error(
+            "token_endpoint_blocked",
+            reason="Unauthenticated token generation not allowed in production",
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="This demo endpoint is disabled in production. "
+            "Implement proper credential validation for production use.",
+        )
+
     jwt_service = get_jwt_service()
 
     access_token = jwt_service.create_token(

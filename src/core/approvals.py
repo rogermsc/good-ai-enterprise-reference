@@ -137,7 +137,7 @@ class ApprovalRequest:
         requester = SecurityContext(
             user_id=requester_data["user_id"],
             tenant_id=requester_data["tenant_id"],
-            roles=requester_data["roles"],
+            roles=tuple(requester_data.get("roles", [])),
         )
         return cls(
             id=data["id"],

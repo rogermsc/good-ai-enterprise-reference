@@ -500,7 +500,7 @@ class TestApprovalManager:
         approver: SecurityContext,
     ) -> None:
         # Create some requests
-        for i in range(3):
+        for _ in range(3):
             manager.create_request(
                 request_type="test",
                 action="test",

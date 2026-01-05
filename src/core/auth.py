@@ -253,19 +253,19 @@ async def get_jwt_security_context(
         jwt_service = JWTService()
         payload = jwt_service.validate_token(credentials.credentials)
 
-        # Convert role strings to Roles enum
-        roles = set()
+        # Validate role strings against known roles
+        valid_roles: list[str] = []
         for role_name in payload.roles:
             try:
-                roles.add(Roles(role_name))
+                Roles(role_name)  # Validate role exists
+                valid_roles.append(role_name)
             except ValueError:
                 logger.warning("unknown_role_in_token", role=role_name)
 
         return SecurityContext(
             user_id=payload.user_id,
             tenant_id=payload.tenant_id,
-            roles=roles,
-            metadata=payload.metadata or {},
+            roles=tuple(valid_roles),
         )
 
     # Fall back to header-based authentication (for backwards compatibility)
@@ -280,20 +280,21 @@ async def get_jwt_security_context(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Parse roles from header
-    roles = set()
+    # Parse roles from header - validate against known roles
+    valid_roles: list[str] = []
     for role_name in roles_header.split(","):
         role_name = role_name.strip()
         if role_name:
             try:
-                roles.add(Roles(role_name))
+                Roles(role_name)  # Validate role exists
+                valid_roles.append(role_name)
             except ValueError:
                 logger.warning("unknown_role_in_header", role=role_name)
 
     return SecurityContext(
         user_id=user_id,
         tenant_id=tenant_id,
-        roles=roles,
+        roles=tuple(valid_roles),
     )
 
 
