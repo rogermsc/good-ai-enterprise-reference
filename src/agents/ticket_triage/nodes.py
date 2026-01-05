@@ -399,7 +399,7 @@ class TriageNodes:
                 "severity": state.severity,
                 "actions": state.actions,
                 "approval_required": state.approval_required,
-                "approval_id": getattr(state, "approval_id", None),
+                "approval_id": state.approval_id,
                 "response_generated": state.response is not None,
                 "latency_ms": state.total_latency_ms,
                 "errors": state.errors if state.errors else None,
@@ -415,7 +415,7 @@ class TriageNodes:
                     "ticket_id": state.ticket_id,
                     "severity": state.severity,
                     "approval_required": state.approval_required,
-                    "approval_id": getattr(state, "approval_id", None),
+                    "approval_id": state.approval_id,
                     "reason": state.policy_reason,
                 },
             )
