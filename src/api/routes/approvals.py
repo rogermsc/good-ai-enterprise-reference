@@ -23,6 +23,7 @@ from src.core.approvals import (
 )
 from src.core.observability import get_logger
 from src.core.security import SecurityContext, get_current_user
+from src.core.webhooks import WebhookEventType, get_webhook_manager
 
 logger = get_logger()
 
@@ -137,6 +138,21 @@ async def create_approval(
         priority=request.priority,
         metadata=request.metadata,
     )
+
+    # Trigger webhook for new approval request
+    webhook_manager = get_webhook_manager()
+    await webhook_manager.trigger_event(
+        event_type=WebhookEventType.APPROVAL_REQUESTED,
+        tenant_id=user.tenant_id,
+        payload={
+            "approval_id": approval.id,
+            "request_type": approval.request_type,
+            "action": approval.action,
+            "priority": approval.priority.value,
+            "requester_id": user.user_id,
+        },
+    )
+
     return _to_response(approval)
 
 
@@ -232,6 +248,20 @@ async def approve_request(
     if not result.success:
         raise HTTPException(status_code=400, detail=result.message)
 
+    # Trigger webhook for approved request
+    webhook_manager = get_webhook_manager()
+    await webhook_manager.trigger_event(
+        event_type=WebhookEventType.APPROVAL_APPROVED,
+        tenant_id=result.request.requester.tenant_id,
+        payload={
+            "approval_id": approval_id,
+            "request_type": result.request.request_type,
+            "action": result.request.action,
+            "reviewer_id": user.user_id,
+            "notes": review.notes,
+        },
+    )
+
     return ApprovalActionResponse(
         success=True,
         message=result.message,
@@ -259,6 +289,20 @@ async def reject_request(
 
     if not result.success:
         raise HTTPException(status_code=400, detail=result.message)
+
+    # Trigger webhook for rejected request
+    webhook_manager = get_webhook_manager()
+    await webhook_manager.trigger_event(
+        event_type=WebhookEventType.APPROVAL_REJECTED,
+        tenant_id=result.request.requester.tenant_id,
+        payload={
+            "approval_id": approval_id,
+            "request_type": result.request.request_type,
+            "action": result.request.action,
+            "reviewer_id": user.user_id,
+            "notes": review.notes,
+        },
+    )
 
     return ApprovalActionResponse(
         success=True,

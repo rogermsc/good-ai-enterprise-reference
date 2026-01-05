@@ -7,8 +7,10 @@ In production, replace header-based auth with OAuth 2.0 / OIDC.
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Annotated
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 
 @dataclass(frozen=True)
@@ -88,3 +90,63 @@ def get_security_context(request: Request) -> SecurityContext:
         tenant_id=tenant_id,
         roles=roles,
     )
+
+
+# FastAPI security scheme for Bearer token authentication
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def get_current_user(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)] = None,
+) -> SecurityContext:
+    """
+    FastAPI dependency for extracting the current user from a request.
+
+    Attempts JWT authentication first, then falls back to header-based auth.
+
+    Usage:
+        @app.get("/protected")
+        async def protected(user: Annotated[SecurityContext, Depends(get_current_user)]):
+            return {"user": user.user_id}
+
+    Raises:
+        HTTPException: If authentication fails
+    """
+    # Try JWT authentication first if Bearer token is provided
+    if credentials and credentials.credentials:
+        # Import here to avoid circular imports
+        from src.core.auth import JWTService
+        from src.core.observability import get_logger
+
+        logger = get_logger()
+
+        try:
+            jwt_service = JWTService()
+            payload = jwt_service.validate_token(credentials.credentials)
+
+            # Validate role strings against known roles
+            valid_roles: list[str] = []
+            for role_name in payload.roles:
+                try:
+                    Roles(role_name)  # Validate role exists
+                    valid_roles.append(role_name)
+                except ValueError:
+                    logger.warning("unknown_role_in_token", role=role_name)
+
+            return SecurityContext(
+                user_id=payload.user_id,
+                tenant_id=payload.tenant_id,
+                roles=tuple(valid_roles),
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Invalid authentication token: {e}",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from e
+
+    # Fall back to header-based authentication
+    return get_security_context(request)
