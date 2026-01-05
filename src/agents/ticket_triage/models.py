@@ -65,6 +65,10 @@ class TicketState(BaseModel):
     response: str | None = None
     approval_required: bool = False
 
+    # Guardrail state
+    guardrail_passed: bool | None = None
+    guardrail_violations: list[dict[str, Any]] | None = None
+
     # Audit state
     audit_log_id: str | None = None
 
@@ -102,6 +106,8 @@ class TriageResult(BaseModel):
     latency_ms: int
     cost_estimate: float
     errors: list[str] = Field(default_factory=list)
+    guardrail_passed: bool | None = None
+    guardrail_violations: list[dict[str, Any]] | None = None
 
     @classmethod
     def from_state(cls, state: TicketState) -> "TriageResult":
@@ -122,4 +128,6 @@ class TriageResult(BaseModel):
             latency_ms=state.total_latency_ms,
             cost_estimate=state.total_cost_estimate,
             errors=state.errors,
+            guardrail_passed=state.guardrail_passed,
+            guardrail_violations=state.guardrail_violations,
         )

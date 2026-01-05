@@ -19,6 +19,7 @@ import asyncpg
 from src.agents.ticket_triage.models import TicketState
 from src.core.audit_log import AuditLogger, AuditLogPayload
 from src.core.config import get_settings
+from src.core.guardrails import GuardrailAction, GuardrailPipeline
 from src.core.llm_gateway import LLMGateway
 from src.core.pii_redaction import PIIRedactor
 from src.core.policy_engine import PolicyEngine
@@ -51,6 +52,7 @@ class TriageNodes:
         self.policy_engine = PolicyEngine()
         self.llm_gateway = LLMGateway(self.settings)
         self.audit_logger = AuditLogger()
+        self.guardrail_pipeline = GuardrailPipeline()
 
     async def ingest_ticket(self, state: TicketState) -> dict[str, Any]:
         """
@@ -197,6 +199,7 @@ class TriageNodes:
         Node: Generate customer response.
 
         Only runs if policy allows (no approval required).
+        Validates output through guardrails before returning.
         """
         # Skip if approval required
         if state.approval_required:
@@ -217,8 +220,41 @@ class TriageNodes:
                 actions=actions,
             )
 
-            # Restore PII in response if token map exists
             response_text = llm_response.content
+
+            # Run guardrails on LLM output before restoring PII
+            guardrail_result = self.guardrail_pipeline.run(
+                response_text,
+                context={
+                    "domain": "support",
+                    "severity": severity,
+                    "ticket_id": state.ticket_id,
+                },
+            )
+
+            # Handle guardrail violations
+            if guardrail_result.action_taken == GuardrailAction.BLOCK:
+                return {
+                    "response": None,
+                    "errors": [
+                        *state.errors,
+                        f"Response blocked by guardrails: {[v.message for v in guardrail_result.violations]}",
+                    ],
+                    "guardrail_violations": [
+                        {
+                            "guardrail": v.guardrail_name,
+                            "severity": v.severity.value,
+                            "message": v.message,
+                        }
+                        for v in guardrail_result.violations
+                    ],
+                }
+
+            # Use filtered content if guardrails applied redaction
+            if guardrail_result.filtered_content:
+                response_text = guardrail_result.filtered_content
+
+            # Restore PII in response if token map exists
             if state.token_map:
                 response_text = self.pii_redactor.restore(
                     response_text,
@@ -232,6 +268,17 @@ class TriageNodes:
                 "total_latency_ms": state.total_latency_ms + latency_ms,
                 "total_cost_estimate": state.total_cost_estimate + llm_response.cost_estimate,
                 "llm_calls": state.llm_calls + 1,
+                "guardrail_passed": guardrail_result.passed,
+                "guardrail_violations": [
+                    {
+                        "guardrail": v.guardrail_name,
+                        "severity": v.severity.value,
+                        "message": v.message,
+                    }
+                    for v in guardrail_result.violations
+                ]
+                if guardrail_result.violations
+                else None,
             }
 
         except Exception as e:
