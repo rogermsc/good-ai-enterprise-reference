@@ -203,11 +203,14 @@ class TriageNodes:
             "policy_requires_approval": decision.requires_approval,
             "policy_reason": decision.reason,
             "policy_risk_level": decision.risk_level,
-            "approval_required": decision.requires_approval,
+            # Only require approval if policy allowed but needs approval
+            # Denied actions should not trigger approval workflow
+            "approval_required": decision.allowed and decision.requires_approval,
         }
 
-        # Create approval request if required
-        if decision.requires_approval:
+        # Create approval request only if allowed but requires approval
+        # Do NOT create approvals for denied actions (e.g., RBAC violations)
+        if decision.allowed and decision.requires_approval:
             # Map severity to approval priority
             priority_map = {
                 "P0": ApprovalPriority.CRITICAL,
@@ -443,14 +446,20 @@ def should_generate_response(state: TicketState | dict[str, Any]) -> str:
     Conditional edge: Determine if response should be generated.
 
     Returns the next node name based on policy decision.
+    - If policy denied: skip response generation
+    - If approval required: skip response generation
+    - Otherwise: generate response
 
     Note: LangGraph passes state as dict, so we handle both types.
     """
     if isinstance(state, dict):
+        policy_allowed = state.get("policy_allowed", True)
         approval_required = state.get("approval_required", False)
     else:
+        policy_allowed = state.policy_allowed
         approval_required = state.approval_required
 
-    if approval_required:
+    # Skip response generation if policy denied or approval required
+    if not policy_allowed or approval_required:
         return "write_audit_log"
     return "generate_response"
