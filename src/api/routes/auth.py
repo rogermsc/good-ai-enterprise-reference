@@ -41,6 +41,12 @@ class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., description="Refresh token")
 
 
+class TokenValidateRequest(BaseModel):
+    """Request body for token validation."""
+
+    token: str = Field(..., description="JWT token to validate")
+
+
 class TokenInfo(BaseModel):
     """Token validation response."""
 
@@ -189,16 +195,17 @@ async def refresh_token(request: RefreshRequest) -> TokenResponse:
     Validate a JWT token and return its payload.
 
     Useful for checking if a token is valid and what claims it contains.
+    Token must be passed in the request body, not as a query parameter.
     """,
 )
-async def validate_token(token: str) -> TokenInfo:
+async def validate_token(request: TokenValidateRequest) -> TokenInfo:
     """
     Validate a JWT token and return its information.
     """
     jwt_service = get_jwt_service()
 
     try:
-        payload = jwt_service.validate_token(token)
+        payload = jwt_service.validate_token(request.token)
 
         return TokenInfo(
             valid=True,
