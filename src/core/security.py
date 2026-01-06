@@ -51,6 +51,20 @@ class Roles:
     SECURITY = "security"
     COMPLIANCE = "compliance"
 
+    # Set of all valid role values for validation
+    VALID_ROLES: frozenset[str] = frozenset({
+        SUPPORT_AGENT,
+        SUPPORT_LEAD,
+        ADMIN,
+        SECURITY,
+        COMPLIANCE,
+    })
+
+    @classmethod
+    def is_valid(cls, role: str) -> bool:
+        """Check if a role name is a valid predefined role."""
+        return role in cls.VALID_ROLES
+
 
 def get_security_context(request: Request) -> SecurityContext:
     """
@@ -82,13 +96,17 @@ def get_security_context(request: Request) -> SecurityContext:
             detail="Missing X-Tenant-Id header",
         )
 
-    # Parse roles from comma-separated header
-    roles = tuple(role.strip() for role in roles_header.split(",") if role.strip())
+    # Parse roles from comma-separated header - validate against known roles
+    valid_roles: list[str] = []
+    for role in roles_header.split(","):
+        role = role.strip()
+        if role and Roles.is_valid(role):
+            valid_roles.append(role)
 
     return SecurityContext(
         user_id=user_id,
         tenant_id=tenant_id,
-        roles=roles,
+        roles=tuple(valid_roles),
     )
 
 
@@ -128,10 +146,9 @@ async def get_current_user(
             # Validate role strings against known roles
             valid_roles: list[str] = []
             for role_name in payload.roles:
-                try:
-                    Roles(role_name)  # Validate role exists
+                if Roles.is_valid(role_name):
                     valid_roles.append(role_name)
-                except ValueError:
+                else:
                     logger.warning("unknown_role_in_token", role=role_name)
 
             return SecurityContext(

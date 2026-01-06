@@ -256,10 +256,9 @@ async def get_jwt_security_context(
         # Validate role strings against known roles
         valid_roles: list[str] = []
         for role_name in payload.roles:
-            try:
-                Roles(role_name)  # Validate role exists
+            if Roles.is_valid(role_name):
                 valid_roles.append(role_name)
-            except ValueError:
+            else:
                 logger.warning("unknown_role_in_token", role=role_name)
 
         return SecurityContext(
@@ -285,10 +284,9 @@ async def get_jwt_security_context(
     for role_name in roles_header.split(","):
         role_name = role_name.strip()
         if role_name:
-            try:
-                Roles(role_name)  # Validate role exists
+            if Roles.is_valid(role_name):
                 valid_roles.append(role_name)
-            except ValueError:
+            else:
                 logger.warning("unknown_role_in_header", role=role_name)
 
     return SecurityContext(
