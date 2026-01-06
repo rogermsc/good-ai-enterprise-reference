@@ -214,8 +214,8 @@ class JWTService:
         """
         payload = self.validate_token(refresh_token)
 
-        # Verify it's a refresh token
-        if payload.metadata and payload.metadata.get("type") != "refresh":
+        # Verify it's a refresh token - must have metadata with type="refresh"
+        if not payload.metadata or payload.metadata.get("type") != "refresh":
             raise HTTPException(
                 status_code=401,
                 detail="Invalid refresh token",

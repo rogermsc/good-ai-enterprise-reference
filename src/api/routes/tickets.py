@@ -191,13 +191,11 @@ async def triage_ticket(
 
     # Check if policy denied
     if not result.policy_decision.get("allowed", True):
+        reason = result.policy_decision.get("reason", "Policy check failed")
+        risk_level = result.policy_decision.get("risk_level", "unknown")
         raise HTTPException(
             status_code=403,
-            detail={
-                "message": "Policy denied the request",
-                "reason": result.policy_decision.get("reason"),
-                "risk_level": result.policy_decision.get("risk_level"),
-            },
+            detail=f"Policy denied the request: {reason} (risk level: {risk_level})",
         )
 
     return TriageResponse(

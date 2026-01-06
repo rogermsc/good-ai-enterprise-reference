@@ -22,10 +22,13 @@ from src.core.audit_log import AuditLogger, AuditLogPayload
 from src.core.config import get_settings
 from src.core.guardrails import GuardrailAction, GuardrailPipeline
 from src.core.llm_gateway import LLMGateway
+from src.core.observability import get_logger
 from src.core.pii_redaction import PIIRedactor
 from src.core.policy_engine import PolicyEngine
 from src.core.security import SecurityContext
 from src.core.webhooks import WebhookEventType, WebhookManager, get_webhook_manager
+
+logger = get_logger()
 
 
 class TriageNodes:
@@ -234,18 +237,21 @@ class TriageNodes:
             )
             result["approval_id"] = approval.id
 
-            # Trigger webhook for approval request
-            await self.webhook_manager.trigger_event(
-                event_type=WebhookEventType.APPROVAL_REQUESTED,
-                tenant_id=self.security_context.tenant_id,
-                payload={
-                    "approval_id": approval.id,
-                    "ticket_id": state.ticket_id,
-                    "severity": severity,
-                    "priority": priority.value,
-                    "reason": decision.reason,
-                },
-            )
+            # Trigger webhook for approval request (fire-and-forget, don't block on failure)
+            try:
+                await self.webhook_manager.trigger_event(
+                    event_type=WebhookEventType.APPROVAL_REQUESTED,
+                    tenant_id=self.security_context.tenant_id,
+                    payload={
+                        "approval_id": approval.id,
+                        "ticket_id": state.ticket_id,
+                        "severity": severity,
+                        "priority": priority.value,
+                        "reason": decision.reason,
+                    },
+                )
+            except Exception as e:
+                logger.error("webhook_trigger_failed", event="APPROVAL_REQUESTED", error=str(e))
 
         return result
 
@@ -390,35 +396,41 @@ class TriageNodes:
                     "errors": [*state.errors, f"Audit log error: {e!s}"],
                 }
 
-        # Trigger TICKET_TRIAGED webhook
-        await self.webhook_manager.trigger_event(
-            event_type=WebhookEventType.TICKET_TRIAGED,
-            tenant_id=self.security_context.tenant_id,
-            payload={
-                "ticket_id": state.ticket_id,
-                "severity": state.severity,
-                "actions": state.actions,
-                "approval_required": state.approval_required,
-                "approval_id": state.approval_id,
-                "response_generated": state.response is not None,
-                "latency_ms": state.total_latency_ms,
-                "errors": state.errors if state.errors else None,
-            },
-        )
-
-        # Trigger escalation webhook if high severity
-        if state.severity in ("P0", "P1"):
+        # Trigger TICKET_TRIAGED webhook (fire-and-forget, don't block on failure)
+        try:
             await self.webhook_manager.trigger_event(
-                event_type=WebhookEventType.TICKET_ESCALATED,
+                event_type=WebhookEventType.TICKET_TRIAGED,
                 tenant_id=self.security_context.tenant_id,
                 payload={
                     "ticket_id": state.ticket_id,
                     "severity": state.severity,
+                    "actions": state.actions,
                     "approval_required": state.approval_required,
                     "approval_id": state.approval_id,
-                    "reason": state.policy_reason,
+                    "response_generated": state.response is not None,
+                    "latency_ms": state.total_latency_ms,
+                    "errors": state.errors if state.errors else None,
                 },
             )
+        except Exception as e:
+            logger.error("webhook_trigger_failed", event="TICKET_TRIAGED", error=str(e))
+
+        # Trigger escalation webhook if high severity
+        if state.severity in ("P0", "P1"):
+            try:
+                await self.webhook_manager.trigger_event(
+                    event_type=WebhookEventType.TICKET_ESCALATED,
+                    tenant_id=self.security_context.tenant_id,
+                    payload={
+                        "ticket_id": state.ticket_id,
+                        "severity": state.severity,
+                        "approval_required": state.approval_required,
+                        "approval_id": state.approval_id,
+                        "reason": state.policy_reason,
+                    },
+                )
+            except Exception as e:
+                logger.error("webhook_trigger_failed", event="TICKET_ESCALATED", error=str(e))
 
         return {
             "audit_log_id": audit_id,

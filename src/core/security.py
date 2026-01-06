@@ -158,12 +158,12 @@ async def get_current_user(
             )
         except HTTPException:
             raise
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=401,
-                detail=f"Invalid authentication token: {e}",
+                detail="Invalid authentication token",
                 headers={"WWW-Authenticate": "Bearer"},
-            ) from e
+            )
 
     # Fall back to header-based authentication
     return get_security_context(request)
