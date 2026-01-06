@@ -6,6 +6,7 @@ for development and production environments.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -63,6 +64,19 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     enable_tracing: bool = True
 
+    # Policy Configuration
+    # Policy preset: default, lgpd-br, gdpr-eu, lopd-ec
+    policy_preset: str = "default"
+    # Path to custom policy config directory (optional)
+    policy_config_dir: Path | None = None
+
+    # PII Pattern Configuration
+    # Pattern sets to load: default, brazil, ecuador, europe, latam
+    # Can be comma-separated for multiple: "default,brazil"
+    pii_pattern_sets: str = "default"
+    # Path to custom PII pattern config directory (optional)
+    pii_pattern_config_dir: Path | None = None
+
     @property
     def is_mock_mode(self) -> bool:
         """Check if running in mock mode (no real LLM calls)."""
@@ -74,6 +88,11 @@ class Settings(BaseSettings):
         if self.database_url.startswith("postgresql://"):
             return self.database_url.replace("postgresql://", "postgresql+asyncpg://")
         return self.database_url
+
+    @property
+    def pii_pattern_sets_list(self) -> list[str]:
+        """Get PII pattern sets as a list."""
+        return [s.strip() for s in self.pii_pattern_sets.split(",") if s.strip()]
 
 
 @lru_cache

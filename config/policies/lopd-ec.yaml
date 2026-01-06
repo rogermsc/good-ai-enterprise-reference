@@ -1,0 +1,73 @@
+# LOPD (Ley Orgánica de Protección de Datos Personales) - Ecuador
+# Regulation-specific policy overrides
+
+metadata:
+  name: lopd-ec
+  version: "1.0.0"
+  description: "Ecuador LOPD compliance policy"
+  regulation: "Ley Orgánica de Protección de Datos Personales"
+  jurisdiction: "Ecuador"
+
+extends: default
+
+# Ecuador LOPD severity rules
+severity_rules:
+  P0:
+    requires_approval: true
+    risk_level: critical
+    reason: "LOPD: Critical severity requires immediate compliance review"
+  P1:
+    requires_approval: true
+    risk_level: high
+    reason: "LOPD: High severity requires data protection officer review"
+
+# LOPD approval requirements
+approval_required_actions:
+  - delete_customer_data
+  - modify_customer_data
+  - access_customer_data
+  - refund_customer
+  - page_oncall
+  - export_customer_data
+  - cross_border_transfer
+
+# Ecuador-specific actions
+actions:
+  cross_border_transfer:
+    category: data
+    risk_level: high
+    description: "Transfer data outside Ecuador"
+  sensitive_data_processing:
+    category: data
+    risk_level: critical
+    description: "Process sensitive personal data"
+
+# LOPD compliance settings
+compliance:
+  retention:
+    audit_logs: 1825  # 5 years
+    customer_data: 365
+    consent_records: 1825
+
+  audit_fields:
+    - data_subject_id
+    - cedula_number
+    - legal_basis
+    - processing_purpose
+    - data_categories
+
+  data_transfer:
+    allowed_countries:
+      - EC  # Ecuador
+      - countries_with_equivalent_protection
+    requires_authorization: true
+    authority: "Superintendencia de Protección de Datos Personales"
+
+  # Sensitive data categories under LOPD
+  sensitive_categories:
+    - ethnic_origin
+    - political_opinions
+    - religious_beliefs
+    - health_data
+    - biometric_data
+    - genetic_data

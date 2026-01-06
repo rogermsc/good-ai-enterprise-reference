@@ -1,0 +1,97 @@
+# Latin America PII Patterns
+# Regional patterns for LATAM countries (excluding Brazil which has its own file)
+
+metadata:
+  name: latam
+  version: "1.0.0"
+  description: "Latin American PII patterns"
+  jurisdictions:
+    - Mexico
+    - Colombia
+    - Chile
+    - Argentina
+    - Peru
+
+extends: default
+
+patterns:
+  # Mexican RFC (Registro Federal de Contribuyentes)
+  # Format: 4 letters (company) or 3 letters (individual) + 6 digits + 3 alphanumeric
+  - name: rfc_mx
+    description: "Mexican RFC (taxpayer ID)"
+    token_prefix: PII_RFC_MX
+    pattern: '\b[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}\b'
+    priority: 1
+    enabled: true
+
+  # Mexican CURP (Clave Única de Registro de Población)
+  # Format: 18 alphanumeric characters
+  - name: curp_mx
+    description: "Mexican CURP (population registry)"
+    token_prefix: PII_CURP
+    pattern: '\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b'
+    priority: 1
+    enabled: true
+
+  # Colombian NIT (Número de Identificación Tributaria)
+  # Format: 9 digits + check digit
+  - name: nit_co
+    description: "Colombian NIT (taxpayer ID)"
+    token_prefix: PII_NIT_CO
+    pattern: '\b\d{9}-?\d{1}\b'
+    priority: 2
+    enabled: true
+
+  # Colombian Cédula
+  # Format: 8-10 digits
+  - name: cedula_co
+    description: "Colombian Cédula (national ID)"
+    token_prefix: PII_CEDULA_CO
+    pattern: '\b\d{8,10}\b'
+    priority: 3
+    enabled: false  # Disabled due to false positives
+
+  # Chilean RUT (Rol Único Tributario)
+  # Format: XX.XXX.XXX-X or XXXXXXXX-X
+  - name: rut_cl
+    description: "Chilean RUT (taxpayer ID)"
+    token_prefix: PII_RUT_CL
+    pattern: '\b\d{1,2}\.?\d{3}\.?\d{3}-?[0-9Kk]\b'
+    priority: 1
+    enabled: true
+
+  # Argentine CUIL/CUIT
+  # Format: XX-XXXXXXXX-X
+  - name: cuil_ar
+    description: "Argentine CUIL/CUIT (tax/social ID)"
+    token_prefix: PII_CUIL_AR
+    pattern: '\b(?:20|23|24|27|30|33|34)-?\d{8}-?\d{1}\b'
+    priority: 1
+    enabled: true
+
+  # Argentine DNI
+  # Format: 7-8 digits
+  - name: dni_ar
+    description: "Argentine DNI (national ID)"
+    token_prefix: PII_DNI_AR
+    pattern: '\b\d{7,8}\b'
+    priority: 4
+    enabled: false  # Disabled due to false positives
+
+  # Peruvian DNI
+  # Format: 8 digits
+  - name: dni_pe
+    description: "Peruvian DNI (national ID)"
+    token_prefix: PII_DNI_PE
+    pattern: '\b\d{8}\b'
+    priority: 4
+    enabled: false  # Disabled due to false positives
+
+  # Peruvian RUC
+  # Format: 11 digits starting with 10, 15, 17, or 20
+  - name: ruc_pe
+    description: "Peruvian RUC (taxpayer ID)"
+    token_prefix: PII_RUC_PE
+    pattern: '\b(?:10|15|17|20)\d{9}\b'
+    priority: 2
+    enabled: true

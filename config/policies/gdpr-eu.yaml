@@ -1,0 +1,80 @@
+# GDPR (General Data Protection Regulation) - European Union
+# Regulation-specific policy overrides
+
+metadata:
+  name: gdpr-eu
+  version: "1.0.0"
+  description: "EU GDPR compliance policy"
+  regulation: "Regulation (EU) 2016/679"
+  jurisdiction: "European Union"
+
+extends: default
+
+# GDPR-specific severity rules
+severity_rules:
+  P0:
+    requires_approval: true
+    risk_level: critical
+    reason: "GDPR: Critical severity requires DPO notification within 72 hours"
+  P1:
+    requires_approval: true
+    risk_level: high
+    reason: "GDPR: High severity requires compliance review"
+
+# GDPR requires explicit approval for data operations
+approval_required_actions:
+  - delete_customer_data    # Art. 17 - Right to erasure
+  - modify_customer_data    # Art. 16 - Right to rectification
+  - access_customer_data    # Art. 15 - Right of access
+  - refund_customer
+  - page_oncall
+  - export_customer_data    # Art. 20 - Right to data portability
+  - automated_decision      # Art. 22 - Automated decision-making
+
+# Additional GDPR-specific actions
+actions:
+  export_customer_data:
+    category: data
+    risk_level: high
+    description: "Export customer data (GDPR portability)"
+  automated_decision:
+    category: processing
+    risk_level: high
+    description: "Automated decision-making with legal effects"
+  consent_withdrawal:
+    category: compliance
+    risk_level: medium
+    description: "Process consent withdrawal"
+  data_breach_report:
+    category: incident
+    risk_level: critical
+    description: "Report data breach to supervisory authority"
+
+# GDPR compliance settings
+compliance:
+  retention:
+    audit_logs: 2190  # 6 years
+    customer_data: 365
+    consent_records: 2190
+
+  audit_fields:
+    - data_subject_id
+    - legal_basis
+    - processing_purpose
+    - data_categories
+    - recipients
+    - retention_period
+    - safeguards
+
+  data_transfer:
+    allowed_countries:
+      - EU_EEA_members
+      - adequacy_decision_countries
+      - UK  # Post-Brexit adequacy
+    requires_sccs: true  # Standard Contractual Clauses
+    requires_dpia: true  # Data Protection Impact Assessment
+
+  # Breach notification requirements
+  breach_notification:
+    authority_deadline_hours: 72
+    subject_deadline: "without undue delay"

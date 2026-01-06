@@ -1,0 +1,74 @@
+# Brazil PII Patterns
+# Brazilian-specific personally identifiable information patterns
+
+metadata:
+  name: brazil
+  version: "1.0.0"
+  description: "Brazilian PII patterns (CPF, CNPJ, etc.)"
+  jurisdiction: "Brazil"
+  regulation: "LGPD"
+
+# Inherit default patterns
+extends: default
+
+patterns:
+  # Brazilian CPF (Cadastro de Pessoas Físicas)
+  # Format: XXX.XXX.XXX-XX or XXXXXXXXXXX (11 digits)
+  - name: cpf
+    description: "Brazilian CPF (individual taxpayer ID)"
+    token_prefix: PII_CPF
+    pattern: '\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b'
+    priority: 1
+    enabled: true
+    validation:
+      # CPF has a check digit algorithm
+      checksum: true
+      length: 11
+
+  # Brazilian CNPJ (Cadastro Nacional da Pessoa Jurídica)
+  # Format: XX.XXX.XXX/XXXX-XX or XXXXXXXXXXXXXX (14 digits)
+  - name: cnpj
+    description: "Brazilian CNPJ (company taxpayer ID)"
+    token_prefix: PII_CNPJ
+    pattern: '\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b'
+    priority: 2
+    enabled: true
+    validation:
+      checksum: true
+      length: 14
+
+  # Brazilian RG (Registro Geral - Identity Card)
+  # Format varies by state, typically 7-9 digits
+  - name: rg
+    description: "Brazilian RG (identity card)"
+    token_prefix: PII_RG
+    pattern: '\b\d{1,2}\.?\d{3}\.?\d{3}-?[0-9Xx]\b'
+    priority: 3
+    enabled: true
+
+  # Brazilian PIS/PASEP (Social security number)
+  # Format: XXX.XXXXX.XX-X (11 digits)
+  - name: pis
+    description: "Brazilian PIS/PASEP (social security)"
+    token_prefix: PII_PIS
+    pattern: '\b\d{3}\.?\d{5}\.?\d{2}-?\d{1}\b'
+    priority: 4
+    enabled: true
+
+  # Brazilian phone numbers
+  # Format: (XX) XXXXX-XXXX or (XX) XXXX-XXXX
+  - name: phone_br
+    description: "Brazilian phone numbers"
+    token_prefix: PII_PHONE_BR
+    pattern: '\b\(?\d{2}\)?[-.\s]?9?\d{4}[-.\s]?\d{4}\b'
+    priority: 15
+    enabled: true
+
+  # Brazilian CEP (postal code)
+  # Format: XXXXX-XXX
+  - name: cep
+    description: "Brazilian CEP (postal code)"
+    token_prefix: PII_CEP
+    pattern: '\b\d{5}-?\d{3}\b'
+    priority: 25
+    enabled: true

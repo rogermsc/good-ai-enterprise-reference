@@ -1,0 +1,76 @@
+# European PII Patterns
+# EU/EEA-specific personally identifiable information patterns
+
+metadata:
+  name: europe
+  version: "1.0.0"
+  description: "European PII patterns for GDPR compliance"
+  jurisdiction: "European Union"
+  regulation: "GDPR"
+
+extends: default
+
+patterns:
+  # IBAN (International Bank Account Number)
+  # Format: 2 letter country code + 2 check digits + up to 30 alphanumeric
+  - name: iban
+    description: "IBAN (International Bank Account Number)"
+    token_prefix: PII_IBAN
+    pattern: '\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b'
+    priority: 3
+    enabled: true
+
+  # EU VAT Number
+  # Format: 2 letter country code + 8-12 alphanumeric
+  - name: vat_eu
+    description: "EU VAT number"
+    token_prefix: PII_VAT
+    pattern: '\b[A-Z]{2}\d{8,12}\b'
+    priority: 4
+    enabled: true
+
+  # German Tax ID (Steuer-ID)
+  # Format: 11 digits
+  - name: tax_id_de
+    description: "German Tax ID (Steuer-ID)"
+    token_prefix: PII_TAX_DE
+    pattern: '\b\d{11}\b'
+    priority: 5
+    enabled: false  # Disabled by default due to false positives
+
+  # UK National Insurance Number
+  # Format: 2 letters + 6 digits + 1 letter
+  - name: nino_uk
+    description: "UK National Insurance Number"
+    token_prefix: PII_NINO
+    pattern: '\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b'
+    priority: 2
+    enabled: true
+
+  # French INSEE Number (Social Security)
+  # Format: 15 digits
+  - name: insee_fr
+    description: "French INSEE number (Social Security)"
+    token_prefix: PII_INSEE
+    pattern: '\b[12]\d{2}(?:0[1-9]|1[0-2])\d{8}\d{2}\b'
+    priority: 2
+    enabled: true
+
+  # Spanish DNI/NIE
+  # DNI: 8 digits + 1 letter
+  # NIE: 1 letter + 7 digits + 1 letter
+  - name: dni_es
+    description: "Spanish DNI/NIE"
+    token_prefix: PII_DNI_ES
+    pattern: '\b(?:\d{8}[A-Z]|[XYZ]\d{7}[A-Z])\b'
+    priority: 2
+    enabled: true
+
+  # Italian Codice Fiscale
+  # Format: 16 alphanumeric characters
+  - name: codice_fiscale_it
+    description: "Italian Codice Fiscale"
+    token_prefix: PII_CF_IT
+    pattern: '\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b'
+    priority: 2
+    enabled: true

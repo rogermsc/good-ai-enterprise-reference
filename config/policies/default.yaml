@@ -1,0 +1,147 @@
+# Default Policy Configuration
+# This is the base policy that can be overridden by regulation-specific presets
+
+metadata:
+  name: default
+  version: "1.0.0"
+  description: Default enterprise policy configuration
+
+# Severity-based approval requirements
+severity_rules:
+  P0:
+    requires_approval: true
+    risk_level: critical
+    reason: "P0 (Critical) severity requires manager approval before customer response"
+  P1:
+    requires_approval: true
+    risk_level: high
+    reason: "P1 (High) severity requires review before customer response"
+  P2:
+    requires_approval: false
+    risk_level: medium
+    reason: "P2 (Medium) severity - standard processing"
+  P3:
+    requires_approval: false
+    risk_level: low
+    reason: "P3 (Low) severity - standard processing"
+  P4:
+    requires_approval: false
+    risk_level: low
+    reason: "P4 (Info) severity - standard processing"
+
+# Role-based access control
+roles:
+  support_agent:
+    description: "Front-line support agent"
+    allowed_actions:
+      - read_ticket
+      - classify
+      - respond
+      - notify_customer
+
+  support_lead:
+    description: "Support team lead"
+    allowed_actions:
+      - read_ticket
+      - classify
+      - respond
+      - notify_customer
+      - escalate_to_engineering
+      - escalate_to_management
+      - refund_customer
+
+  admin:
+    description: "System administrator"
+    allowed_actions:
+      - read_ticket
+      - classify
+      - respond
+      - notify_customer
+      - escalate_to_engineering
+      - escalate_to_security
+      - escalate_to_management
+      - refund_customer
+      - access_customer_data
+      - modify_customer_data
+      - create_incident
+      - page_oncall
+
+  security:
+    description: "Security team member"
+    allowed_actions:
+      - read_ticket
+      - classify
+      - escalate_to_security
+      - access_customer_data
+      - create_incident
+      - page_oncall
+
+  compliance:
+    description: "Compliance officer"
+    allowed_actions:
+      - read_ticket
+      - classify
+      - access_customer_data
+      - escalate_to_management
+
+# Actions that always require approval regardless of role
+approval_required_actions:
+  - delete_customer_data
+  - modify_customer_data
+  - refund_customer
+  - page_oncall
+
+# Action definitions with metadata
+actions:
+  read_ticket:
+    category: basic
+    risk_level: low
+    description: "Read ticket content"
+  classify:
+    category: basic
+    risk_level: low
+    description: "Classify ticket severity"
+  respond:
+    category: basic
+    risk_level: low
+    description: "Generate response to customer"
+  notify_customer:
+    category: customer
+    risk_level: low
+    description: "Send notification to customer"
+  escalate_to_engineering:
+    category: escalation
+    risk_level: medium
+    description: "Escalate to engineering team"
+  escalate_to_security:
+    category: escalation
+    risk_level: high
+    description: "Escalate to security team"
+  escalate_to_management:
+    category: escalation
+    risk_level: medium
+    description: "Escalate to management"
+  refund_customer:
+    category: customer
+    risk_level: high
+    description: "Process customer refund"
+  access_customer_data:
+    category: data
+    risk_level: medium
+    description: "Access customer data"
+  modify_customer_data:
+    category: data
+    risk_level: high
+    description: "Modify customer data"
+  delete_customer_data:
+    category: data
+    risk_level: critical
+    description: "Delete customer data"
+  create_incident:
+    category: incident
+    risk_level: medium
+    description: "Create incident report"
+  page_oncall:
+    category: incident
+    risk_level: high
+    description: "Page on-call engineer"

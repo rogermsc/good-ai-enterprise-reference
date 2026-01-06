@@ -1,0 +1,72 @@
+# LGPD (Lei Geral de Proteção de Dados) - Brazil
+# Regulation-specific policy overrides
+
+metadata:
+  name: lgpd-br
+  version: "1.0.0"
+  description: "Brazilian LGPD compliance policy"
+  regulation: "Lei nº 13.709/2018"
+  jurisdiction: "Brazil"
+
+# Inherit from default and override
+extends: default
+
+# LGPD-specific severity overrides
+# Data subject rights requests are always high priority
+severity_rules:
+  P0:
+    requires_approval: true
+    risk_level: critical
+    reason: "LGPD: Critical severity requires DPO approval"
+  P1:
+    requires_approval: true
+    risk_level: high
+    reason: "LGPD: High severity requires compliance review"
+
+# LGPD requires stricter controls on data operations
+approval_required_actions:
+  - delete_customer_data    # LGPD Art. 18 - Right to deletion
+  - modify_customer_data    # LGPD Art. 18 - Right to correction
+  - access_customer_data    # LGPD Art. 18 - Right to access (audit trail)
+  - refund_customer
+  - page_oncall
+  - export_customer_data    # LGPD Art. 18 - Right to portability
+
+# Additional LGPD-specific actions
+actions:
+  export_customer_data:
+    category: data
+    risk_level: high
+    description: "Export customer data (LGPD portability)"
+  anonymize_customer_data:
+    category: data
+    risk_level: medium
+    description: "Anonymize customer data"
+  consent_management:
+    category: compliance
+    risk_level: medium
+    description: "Manage customer consent records"
+
+# LGPD compliance settings
+compliance:
+  # Data retention limits (in days)
+  retention:
+    audit_logs: 1825  # 5 years minimum
+    customer_data: 365
+    anonymized_data: -1  # No limit
+
+  # Mandatory audit fields for LGPD
+  audit_fields:
+    - data_subject_id
+    - legal_basis
+    - processing_purpose
+    - data_categories
+    - retention_period
+
+  # Cross-border transfer rules
+  data_transfer:
+    allowed_countries:
+      - BR  # Brazil
+      - countries_with_adequacy_decision
+    requires_consent: true
+    requires_contract: true

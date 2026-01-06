@@ -1,0 +1,54 @@
+# Ecuador PII Patterns
+# Ecuadorian-specific personally identifiable information patterns
+
+metadata:
+  name: ecuador
+  version: "1.0.0"
+  description: "Ecuadorian PII patterns (Cédula, RUC, etc.)"
+  jurisdiction: "Ecuador"
+  regulation: "LOPD"
+
+extends: default
+
+patterns:
+  # Ecuadorian Cédula de Identidad
+  # Format: 10 digits with province code prefix (01-24)
+  - name: cedula
+    description: "Ecuadorian Cédula (national ID)"
+    token_prefix: PII_CEDULA
+    pattern: '\b(?:0[1-9]|1\d|2[0-4])\d{8}\b'
+    priority: 1
+    enabled: true
+    validation:
+      checksum: true
+      length: 10
+      province_codes: "01-24"
+
+  # Ecuadorian RUC (Registro Único de Contribuyentes)
+  # Format: 13 digits (Cédula + 001 for individuals, different for companies)
+  - name: ruc
+    description: "Ecuadorian RUC (taxpayer ID)"
+    token_prefix: PII_RUC
+    pattern: '\b(?:0[1-9]|1\d|2[0-4])\d{11}\b'
+    priority: 2
+    enabled: true
+    validation:
+      length: 13
+
+  # Ecuadorian phone numbers
+  # Format: 09XXXXXXXX (mobile) or 0X-XXXXXXX (landline)
+  - name: phone_ec
+    description: "Ecuadorian phone numbers"
+    token_prefix: PII_PHONE_EC
+    pattern: '\b(?:09\d{8}|0[2-7]-?\d{7})\b'
+    priority: 15
+    enabled: true
+
+  # Ecuadorian passport
+  # Format: Varies, typically alphanumeric
+  - name: passport_ec
+    description: "Ecuadorian passport number"
+    token_prefix: PII_PASSPORT_EC
+    pattern: '\b[A-Z]{1,2}\d{6,7}\b'
+    priority: 5
+    enabled: true
