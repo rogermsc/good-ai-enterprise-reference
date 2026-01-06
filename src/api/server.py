@@ -109,7 +109,9 @@ def create_app() -> FastAPI:
     )
 
     # Configure CORS
-    if settings.environment == "production" and "*" in settings.cors_origins:
+    # SECURITY: Never use allow_credentials=True with wildcard origins
+    use_wildcard = "*" in settings.cors_origins
+    if settings.environment == "production" and use_wildcard:
         logger.warning(
             "cors_wildcard_in_production",
             message="CORS allows all origins in production - configure specific origins",
@@ -117,7 +119,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        # SECURITY: Disable credentials when using wildcard origins per CORS spec
+        allow_credentials=not use_wildcard,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -52,13 +52,15 @@ class Roles:
     COMPLIANCE = "compliance"
 
     # Set of all valid role values for validation
-    VALID_ROLES: frozenset[str] = frozenset({
-        SUPPORT_AGENT,
-        SUPPORT_LEAD,
-        ADMIN,
-        SECURITY,
-        COMPLIANCE,
-    })
+    VALID_ROLES: frozenset[str] = frozenset(
+        {
+            SUPPORT_AGENT,
+            SUPPORT_LEAD,
+            ADMIN,
+            SECURITY,
+            COMPLIANCE,
+        }
+    )
 
     @classmethod
     def is_valid(cls, role: str) -> bool:
