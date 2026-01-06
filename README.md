@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Good AI — Trust Layer Architecture</strong><br>
-  <em>Production-grade patterns for secure, auditable, policy-governed AI systems</em>
+  <em>Reference patterns for secure, auditable, policy-governed AI systems</em>
 </p>
 
 ---
@@ -23,7 +23,7 @@ This repository demonstrates how to build enterprise AI systems that are:
 - **Auditable** — Every inference logged with redacted inputs, policy decisions, and costs
 - **Compliant** — Data sovereignty patterns, PII redaction, role-based access control
 - **Observable** — Structured logging, latency tracking, cost estimation hooks
-- **Production-Ready** — Docker Compose, CI/CD, typed Python, async FastAPI
+- **Well-Tested** — 343+ unit tests, CI/CD pipeline, typed Python, async FastAPI
 
 The core innovation is the **Trust Layer**: a gateway that sits between your application and LLM providers, enforcing policies, redacting PII, and maintaining audit trails.
 
@@ -148,23 +148,31 @@ This reference implementation demonstrates that enterprise AI systems can be:
 
 ---
 
-## Enterprise Readiness Checklist
+## What This Is / What This Isn't
 
-- [x] Audit logging with immutable records
-- [x] PII redaction with reversible tokenization
-- [x] Role-based access control (RBAC)
-- [x] Policy engine with approval workflows
-- [x] Severity-based escalation (P0/P1 gating)
-- [x] Mock mode for development/testing
-- [x] Typed models (Pydantic)
-- [x] Async FastAPI architecture
-- [x] Docker Compose deployment
-- [x] CI/CD pipeline
-- [x] Security scanning
-- [x] Threat model documentation
-- [ ] Kubernetes manifests (see production guide)
-- [ ] Secrets manager integration (documented)
-- [ ] Observability stack (OpenTelemetry hooks ready)
+### What This Is
+- A **reference implementation** demonstrating enterprise AI architecture patterns
+- A **learning resource** for building secure, auditable AI systems
+- A **starting point** that you can adapt to your specific requirements
+
+### What This Isn't
+- **NOT production-ready out of the box** — requires security review and hardening for your environment
+- **NOT a complete product** — missing features like output sanitization, rate limiting, budget enforcement
+- **NOT officially supported** — provided as-is for educational purposes
+
+## Implementation Status
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| Trust Layer (PII, Policy, Audit) | ✅ Complete | Core security patterns implemented |
+| Unit Tests | ✅ 343 passing | Deterministic, no external dependencies |
+| CI/CD Pipeline | ✅ GitHub Actions | Lint, test, build on every PR |
+| Docker Deployment | ✅ Compose | Single-node development setup |
+| Security Scanning | ✅ CodeQL + Dependabot | Automated vulnerability detection |
+| Kubernetes | ⚠️ Not included | See production guide for patterns |
+| Output Sanitization | ⚠️ Partial | Guardrails framework in place |
+| Rate Limiting | ❌ Not implemented | Planned for future release |
+| Budget Enforcement | ❌ Not implemented | Cost tracking hooks ready |
 
 ---
 

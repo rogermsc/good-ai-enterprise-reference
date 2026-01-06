@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-01-15
+## [0.1.0] - 2026-01-06
 
 ### Added
 
@@ -19,21 +19,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - LangGraph-based stateful workflow
   - Automatic PII redaction before LLM processing
   - Severity classification (P0-P4)
-  - Action recommendations
-  - Policy-gated response generation
+  - Action recommendations with policy gating
+  - Human-in-the-loop approval workflows
+  - Webhook notifications for external integrations
   - Full audit trail
+
+- **Approval System**
+  - Request/approve/reject workflow
+  - Priority levels (Critical, High, Medium, Low)
+  - Self-approval prevention
+  - Expiration handling
+
+- **Webhook System**
+  - HMAC-SHA256 signed payloads
+  - Retry with exponential backoff
+  - Event types: ticket, approval, system events
 
 - **API Layer**
   - FastAPI async server
+  - JWT authentication with role validation
   - Health check endpoints
-  - Ticket triage endpoint
+  - Ticket triage, approvals, and webhooks endpoints
   - OpenAPI documentation
 
 - **Infrastructure**
   - Docker Compose setup
   - PostgreSQL with pgvector
   - Multi-stage Dockerfile
-  - GitHub Actions CI/CD
+  - GitHub Actions CI/CD (lint, test, build)
 
 - **Documentation**
   - Architecture documentation
@@ -42,11 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ADRs for Trust Layer and Policy Engine
   - Quickstart and production deployment guides
 
-- **Security**
-  - Security scanning workflows
-  - Dependency auditing
-  - Container scanning
-  - Responsible disclosure policy
+- **Testing**
+  - 343 unit tests
+  - Deterministic tests (mock LLM provider)
+  - pytest-asyncio for async testing
 
 ### Security
 
@@ -54,11 +66,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PII redaction mandatory before LLM calls
 - Policy engine gates all tool/action execution
 - Audit logs capture all operations
+- Role validation prevents spoofing
+- CORS properly configured for credentials
+- JWT refresh token validation fixed
 
-### Notes
+### Known Limitations
 
-This is the initial release of the Enterprise AI Platform Reference Implementation.
-It demonstrates production-grade patterns for secure, auditable AI systems.
+- Token refresh returns empty roles (requires user service integration)
+- Rate limiting not implemented
+- Budget enforcement not implemented
+- Kubernetes manifests not included
 
 ---
 
