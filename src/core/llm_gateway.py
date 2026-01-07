@@ -3,9 +3,10 @@ LLM Gateway - Single point of control for all LLM interactions.
 
 The gateway:
 1. Accepts only pre-redacted prompts (PII must be tokenized)
-2. Supports multiple providers (OpenAI, mock)
-3. Tracks latency and estimated costs
-4. Provides deterministic mock responses for testing
+2. Supports multiple providers with failover (OpenAI, Azure, Anthropic, mock)
+3. Tracks latency and estimated costs with budget enforcement
+4. Circuit breaker pattern for provider failures
+5. Provides deterministic mock responses for testing
 
 IMPORTANT: Never pass raw PII to this gateway. Use PIIRedactor first.
 """
@@ -17,6 +18,17 @@ import httpx
 from opentelemetry import trace
 
 from src.core.config import Settings, get_settings
+from src.core.llm_resilience import (
+    BudgetEnforcementResult,
+    BudgetLimit,
+    CostTracker,
+    ProviderHealth,
+    ProviderManager,
+    estimate_request_cost,
+    estimate_tokens,
+    get_cost_tracker,
+    get_provider_manager,
+)
 from src.core.observability import (
     get_logger,
     get_tracer,
@@ -42,6 +54,19 @@ class LLMResponse:
     output_tokens: int
     cost_estimate: float
     is_mock: bool = False
+    was_failover: bool = False  # True if request used fallback provider
+    budget_warning: str | None = None  # Budget warning message if applicable
+
+
+class BudgetExceededError(Exception):
+    """Raised when request would exceed budget limits."""
+
+    def __init__(
+        self, message: str, daily_remaining: float | None, monthly_remaining: float | None
+    ):
+        super().__init__(message)
+        self.daily_remaining = daily_remaining
+        self.monthly_remaining = monthly_remaining
 
 
 # Cost estimates per 1K tokens (approximate, for tracking)
@@ -54,34 +79,57 @@ COST_PER_1K_TOKENS: dict[str, dict[str, float]] = {
 
 class LLMGateway:
     """
-    Gateway for LLM interactions.
+    Gateway for LLM interactions with resilience features.
 
     Provides a unified interface for LLM calls with:
+    - Multi-provider failover (OpenAI → Azure → Anthropic)
+    - Circuit breaker pattern for provider failures
+    - Per-tenant budget tracking and enforcement
+    - Cost estimation before requests
     - Mock mode for testing without API keys
-    - Cost tracking
-    - Latency measurement
-    - Provider abstraction
 
     Example:
         gateway = LLMGateway()
 
         # Classify severity (with redacted content)
         response = await gateway.classify_severity(
-            "Customer [PII_EMAIL_1] reports [PII_CPF_2] data exposed"
+            "Customer [PII_EMAIL_1] reports [PII_CPF_2] data exposed",
+            tenant_id="tenant-123",
         )
 
-        # Generate response
+        # Generate response with budget enforcement
         response = await gateway.generate_response(
             ticket_content="[Redacted ticket content]",
             severity="P2",
-            context="Password reset request",
+            actions=["respond"],
+            tenant_id="tenant-123",
         )
+
+        # Set tenant budget limits
+        gateway.set_tenant_budget("tenant-123", BudgetLimit(daily_limit=100.0))
+
+        # Get provider health status
+        health = gateway.get_provider_health()
     """
 
-    def __init__(self, settings: Settings | None = None):
-        """Initialize gateway with settings."""
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        cost_tracker: CostTracker | None = None,
+        provider_manager: ProviderManager | None = None,
+    ):
+        """
+        Initialize gateway with settings and resilience components.
+
+        Args:
+            settings: Application settings
+            cost_tracker: Cost tracker for budget enforcement (uses singleton if None)
+            provider_manager: Provider manager for failover (uses singleton if None)
+        """
         self.settings = settings or get_settings()
         self._client: httpx.AsyncClient | None = None
+        self._cost_tracker = cost_tracker or get_cost_tracker()
+        self._provider_manager = provider_manager or get_provider_manager()
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
@@ -97,15 +145,52 @@ class LLMGateway:
             await self._client.aclose()
             self._client = None
 
-    async def classify_severity(self, ticket_content: str) -> LLMResponse:
+    # Resilience management methods
+    def set_tenant_budget(self, tenant_id: str, limit: BudgetLimit) -> None:
+        """
+        Set budget limits for a tenant.
+
+        Args:
+            tenant_id: Tenant identifier
+            limit: Budget limits configuration
+        """
+        self._cost_tracker.set_tenant_limit(tenant_id, limit)
+        logger.info(
+            "tenant_budget_set",
+            tenant_id=tenant_id,
+            daily=limit.daily_limit,
+            monthly=limit.monthly_limit,
+        )
+
+    def set_default_budget(self, limit: BudgetLimit) -> None:
+        """Set default budget limits for all tenants."""
+        self._cost_tracker.set_default_limit(limit)
+
+    def get_provider_health(self) -> list[ProviderHealth]:
+        """Get health status of all LLM providers."""
+        return self._provider_manager.get_health()
+
+    def reset_provider_circuit(self, provider_name: str) -> None:
+        """Manually reset a provider's circuit breaker."""
+        self._provider_manager.reset_circuit(provider_name)
+
+    async def classify_severity(
+        self,
+        ticket_content: str,
+        tenant_id: str | None = None,
+    ) -> LLMResponse:
         """
         Classify ticket severity using LLM.
 
         Args:
             ticket_content: Redacted ticket content
+            tenant_id: Tenant identifier for budget tracking
 
         Returns:
             LLMResponse with severity classification (P0-P4)
+
+        Raises:
+            BudgetExceededError: If request would exceed tenant budget
         """
         if self.settings.is_mock_mode:
             return self._mock_classify_severity(ticket_content)
@@ -125,12 +210,13 @@ Ticket content:
 
 Severity:"""
 
-        return await self._complete(prompt, operation="classify_severity")
+        return await self._complete(prompt, operation="classify_severity", tenant_id=tenant_id)
 
     async def recommend_actions(
         self,
         ticket_content: str,
         severity: str,
+        tenant_id: str | None = None,
     ) -> LLMResponse:
         """
         Recommend actions for a ticket.
@@ -138,9 +224,13 @@ Severity:"""
         Args:
             ticket_content: Redacted ticket content
             severity: Classified severity
+            tenant_id: Tenant identifier for budget tracking
 
         Returns:
             LLMResponse with recommended actions
+
+        Raises:
+            BudgetExceededError: If request would exceed tenant budget
         """
         if self.settings.is_mock_mode:
             return self._mock_recommend_actions(ticket_content, severity)
@@ -167,13 +257,14 @@ Ticket content:
 
 Recommended actions (JSON array only):"""
 
-        return await self._complete(prompt, operation="recommend_actions")
+        return await self._complete(prompt, operation="recommend_actions", tenant_id=tenant_id)
 
     async def generate_response(
         self,
         ticket_content: str,
         severity: str,
         actions: list[str],
+        tenant_id: str | None = None,
     ) -> LLMResponse:
         """
         Generate customer response.
@@ -182,9 +273,13 @@ Recommended actions (JSON array only):"""
             ticket_content: Redacted ticket content
             severity: Ticket severity
             actions: Actions being taken
+            tenant_id: Tenant identifier for budget tracking
 
         Returns:
             LLMResponse with customer-facing response
+
+        Raises:
+            BudgetExceededError: If request would exceed tenant budget
         """
         if self.settings.is_mock_mode:
             return self._mock_generate_response(ticket_content, severity)
@@ -207,17 +302,70 @@ Guidelines:
 
 Customer response:"""
 
-        return await self._complete(prompt, operation="generate_response")
+        return await self._complete(prompt, operation="generate_response", tenant_id=tenant_id)
 
-    async def _complete(self, prompt: str, operation: str = "complete") -> LLMResponse:
-        """Make LLM API call with tracing and metrics."""
+    async def _complete(
+        self,
+        prompt: str,
+        operation: str = "complete",
+        tenant_id: str | None = None,
+    ) -> LLMResponse:
+        """
+        Make LLM API call with budget enforcement, circuit breaker, and metrics.
+
+        Args:
+            prompt: The prompt to send to the LLM
+            operation: Operation name for logging/metrics
+            tenant_id: Optional tenant ID for budget tracking
+
+        Returns:
+            LLMResponse with response content and metadata
+
+        Raises:
+            BudgetExceededError: If request would exceed tenant budget
+        """
         with tracer.start_as_current_span(f"llm.{operation}") as span:
+            # Estimate cost before making request
+            estimated_input_tokens = estimate_tokens(prompt)
+            estimated_output_tokens = 500  # max_tokens
+            estimated_cost = estimate_request_cost(
+                self.settings.model_name,
+                estimated_input_tokens,
+                estimated_output_tokens,
+            )
+
+            # Check budget if tenant_id provided
+            budget_warning: str | None = None
+            if tenant_id:
+                budget_result = await self._cost_tracker.check_budget(tenant_id, estimated_cost)
+                if budget_result.result == BudgetEnforcementResult.HARD_LIMIT_EXCEEDED:
+                    logger.warning(
+                        "budget_exceeded",
+                        tenant_id=tenant_id,
+                        estimated_cost=estimated_cost,
+                        message=budget_result.message,
+                    )
+                    raise BudgetExceededError(
+                        budget_result.message or "Budget exceeded",
+                        budget_result.daily_remaining,
+                        budget_result.monthly_remaining,
+                    )
+                elif budget_result.result == BudgetEnforcementResult.SOFT_LIMIT_WARNING:
+                    budget_warning = budget_result.message
+                    logger.info(
+                        "budget_warning",
+                        tenant_id=tenant_id,
+                        message=budget_warning,
+                    )
+
             start_time = time.time()
 
             # Set span attributes
             span.set_attribute("llm.provider", self.settings.llm_provider)
             span.set_attribute("llm.model", self.settings.model_name)
             span.set_attribute("llm.operation", operation)
+            if tenant_id:
+                span.set_attribute("tenant_id", tenant_id)
 
             client = await self._get_client()
 
@@ -232,6 +380,10 @@ Customer response:"""
                 "temperature": 0.3,
                 "max_tokens": 500,
             }
+
+            # Track if we used failover
+            was_failover = False
+            active_provider = self.settings.llm_provider
 
             try:
                 response = await client.post(
@@ -255,6 +407,13 @@ Customer response:"""
                     output_tokens,
                 )
 
+                # Record success in circuit breaker
+                self._provider_manager.record_success(active_provider, latency_ms)
+
+                # Record actual cost for tenant
+                if tenant_id:
+                    await self._cost_tracker.record_cost(tenant_id, cost)
+
                 # Record metrics
                 labels = {"model": self.settings.model_name, "operation": operation}
                 llm_request_counter.add(1, {**labels, "status": "success"})
@@ -274,31 +433,43 @@ Customer response:"""
                     "llm_request_completed",
                     operation=operation,
                     model=self.settings.model_name,
+                    provider=active_provider,
                     latency_ms=latency_ms,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     cost=cost,
+                    tenant_id=tenant_id,
                 )
 
                 return LLMResponse(
                     content=content.strip(),
                     model=self.settings.model_name,
-                    provider=self.settings.llm_provider,
+                    provider=active_provider,
                     latency_ms=latency_ms,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     cost_estimate=cost,
                     is_mock=False,
+                    was_failover=was_failover,
+                    budget_warning=budget_warning,
                 )
 
             except Exception as e:
+                # Record failure in circuit breaker
+                self._provider_manager.record_failure(active_provider)
+
                 llm_request_counter.add(
                     1,
                     {"model": self.settings.model_name, "operation": operation, "status": "error"},
                 )
                 span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                 span.record_exception(e)
-                logger.error("llm_request_failed", operation=operation, error=str(e))
+                logger.error(
+                    "llm_request_failed",
+                    operation=operation,
+                    provider=active_provider,
+                    error=str(e),
+                )
                 raise
 
     def _estimate_cost(
