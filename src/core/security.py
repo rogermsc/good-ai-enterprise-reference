@@ -5,8 +5,8 @@ This module provides authentication context extraction from HTTP headers.
 In production, replace header-based auth with OAuth 2.0 / OIDC.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
 from fastapi import HTTPException, Request
 

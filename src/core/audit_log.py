@@ -3,7 +3,7 @@ Audit Logging for compliance and observability.
 
 The audit logger records all AI operations with:
 - Redacted inputs (never raw PII)
-- Token maps for restoration
+- Token maps for restoration (encrypted at rest)
 - Policy decisions
 - Latency and cost tracking
 - Timestamps
@@ -12,12 +12,48 @@ All records are append-only for compliance.
 """
 
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 import asyncpg
+
+from src.core.encryption import decrypt_token_map, encrypt_token_map
+
+# Input validation patterns
+_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_\-]{1,100}$")
+
+
+class ValidationError(Exception):
+    """Raised when input validation fails."""
+
+    pass
+
+
+def validate_id(value: str, field_name: str) -> str:
+    """
+    Validate an ID field for safe database operations.
+
+    Args:
+        value: The ID value to validate
+        field_name: Name of the field for error messages
+
+    Returns:
+        The validated value
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    if not value:
+        raise ValidationError(f"{field_name} cannot be empty")
+    if not _ID_PATTERN.match(value):
+        raise ValidationError(
+            f"Invalid {field_name}: must be 1-100 alphanumeric characters, "
+            f"underscores, or hyphens"
+        )
+    return value
 
 
 @dataclass
@@ -106,6 +142,13 @@ class AuditLogger:
         """
         audit_id = str(uuid.uuid4())
 
+        # Validate IDs
+        validate_id(payload.ticket_id, "ticket_id")
+        validate_id(payload.tenant_id, "tenant_id")
+
+        # Encrypt token_map before storage for PII protection
+        encrypted_token_map = encrypt_token_map(payload.token_map)
+
         await conn.execute(
             """
             INSERT INTO audit_logs (
@@ -133,7 +176,7 @@ class AuditLogger:
             payload.user_id,
             payload.tenant_id,
             payload.redacted_input,
-            json.dumps(payload.token_map),
+            encrypted_token_map,  # Now encrypted
             payload.model_name,
             payload.provider,
             payload.severity,
@@ -208,7 +251,14 @@ class AuditLogger:
 
         Returns:
             List of AuditLogEntry sorted by created_at desc
+
+        Raises:
+            ValidationError: If ticket_id or tenant_id are invalid
         """
+        # Validate inputs
+        validate_id(ticket_id, "ticket_id")
+        validate_id(tenant_id, "tenant_id")
+
         rows = await conn.fetch(
             """
             SELECT
@@ -290,13 +340,26 @@ class AuditLogger:
 
     def _row_to_entry(self, row: asyncpg.Record) -> AuditLogEntry:
         """Convert database row to AuditLogEntry."""
+        # Decrypt token_map - it's stored encrypted
+        token_map: dict[str, str] = {}
+        if row["token_map"]:
+            try:
+                # New format: encrypted string
+                token_map = decrypt_token_map(row["token_map"])
+            except Exception:
+                # Fallback for legacy unencrypted JSON data
+                try:
+                    token_map = json.loads(row["token_map"])
+                except json.JSONDecodeError:
+                    token_map = {}
+
         return AuditLogEntry(
             audit_id=row["audit_id"],
             ticket_id=row["ticket_id"],
             user_id=row["user_id"],
             tenant_id=row["tenant_id"],
             redacted_input=row["redacted_input"],
-            token_map=json.loads(row["token_map"]) if row["token_map"] else {},
+            token_map=token_map,
             model_name=row["model_name"],
             provider=row["provider"],
             severity=row["severity"],

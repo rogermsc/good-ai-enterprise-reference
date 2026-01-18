@@ -4,12 +4,15 @@ Health check endpoints.
 Provides liveness and readiness probes for container orchestration.
 """
 
+import logging
+
 from fastapi import APIRouter, Response
 from pydantic import BaseModel
 
 from src.core.config import get_settings
+from src.db.connection import get_pool
 
-
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
@@ -55,19 +58,36 @@ async def health_check() -> HealthResponse:
     summary="Readiness check",
     description="Readiness check including dependencies",
 )
-async def readiness_check() -> ReadinessResponse:
+async def readiness_check() -> ReadinessResponse | Response:
     """
     Readiness check endpoint.
 
-    Verifies service is ready to accept traffic.
-    In production, this would check database connectivity.
+    Verifies service is ready to accept traffic by checking:
+    - Database connectivity (executes a simple query)
+    - LLM provider availability
     """
     settings = get_settings()
 
-    # In production, check database connection here
-    database_status = "connected"
+    # Check database connectivity
+    database_status = "disconnected"
+    try:
+        pool = await get_pool()
+        async with pool.connection() as conn:
+            await conn.fetchval("SELECT 1")
+        database_status = "connected"
+    except Exception as e:
+        logger.warning("Database health check failed: %s", str(e))
+        database_status = "disconnected"
 
     llm_status = "mock" if settings.is_mock_mode else "connected"
+
+    # Return 503 if database is not connected
+    if database_status != "connected":
+        return Response(
+            status_code=503,
+            content='{"status": "not_ready", "database": "disconnected"}',
+            media_type="application/json",
+        )
 
     return ReadinessResponse(
         status="ready",

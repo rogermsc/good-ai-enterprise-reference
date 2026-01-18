@@ -43,10 +43,18 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_prefix: str = ""
 
-    # Security
-    cors_origins: list[str] = ["*"]
+    # Security - IMPORTANT: Configure explicitly in production, never use ["*"]
+    cors_origins: list[str] = []
     rate_limit_requests: int = 100
     rate_limit_window_seconds: int = 60
+
+    # Encryption - REQUIRED in production for PII token map encryption
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    encryption_key: str | None = None
+
+    # LLM Configuration - extracted from hardcoded values
+    llm_temperature: float = 0.3
+    llm_max_tokens: int = 500
 
     @property
     def is_mock_mode(self) -> bool:

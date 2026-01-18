@@ -10,11 +10,11 @@ enforcing:
 All LLM-suggested actions must pass policy evaluation before execution.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Sequence
 
-from src.core.security import SecurityContext, Roles
+from src.core.security import Roles, SecurityContext
 
 
 class Severity(str, Enum):

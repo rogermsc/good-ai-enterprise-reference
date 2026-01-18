@@ -9,10 +9,10 @@ These models define the structure for:
 All models use Pydantic for validation and serialization.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TicketInput(BaseModel):
@@ -69,17 +69,14 @@ class TicketState(BaseModel):
     audit_log_id: str | None = None
 
     # Tracking
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
     total_latency_ms: int = 0
     total_cost_estimate: float = 0.0
     llm_calls: int = 0
     errors: list[str] = Field(default_factory=list)
 
-    class Config:
-        """Pydantic config."""
-
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
     @property
     def redacted_content(self) -> str:

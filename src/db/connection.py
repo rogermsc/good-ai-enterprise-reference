@@ -2,10 +2,15 @@
 Database connection management.
 
 Provides async connection pooling for PostgreSQL using asyncpg.
+
+This module uses a singleton pattern for the global pool but provides
+proper accessor functions to make testing easier. In tests, use
+`reset_pool()` to clear state between tests.
 """
 
+import asyncio
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import asyncpg
 
@@ -71,33 +76,54 @@ class DatabasePool:
         async with self._pool.acquire() as conn:
             yield conn
 
-    async def execute(self, query: str, *args) -> str:
+    async def execute(self, query: str, *args: object) -> str:
         """Execute a query without returning results."""
         async with self.connection() as conn:
-            return await conn.execute(query, *args)
+            result: str = await conn.execute(query, *args)
+            return result
 
-    async def fetch(self, query: str, *args) -> list[asyncpg.Record]:
+    async def fetch(self, query: str, *args: object) -> list[asyncpg.Record]:
         """Execute a query and return all results."""
         async with self.connection() as conn:
-            return await conn.fetch(query, *args)
+            result: list[asyncpg.Record] = await conn.fetch(query, *args)
+            return result
 
-    async def fetchrow(self, query: str, *args) -> asyncpg.Record | None:
+    async def fetchrow(self, query: str, *args: object) -> asyncpg.Record | None:
         """Execute a query and return first result."""
         async with self.connection() as conn:
             return await conn.fetchrow(query, *args)
 
 
-# Global pool instance
+# Global pool instance with lock for thread safety
 _pool: DatabasePool | None = None
+_pool_lock: asyncio.Lock | None = None
 
 
-async def create_pool() -> DatabasePool:
-    """Create and initialize global database pool."""
+def _get_lock() -> asyncio.Lock:
+    """Get or create the pool lock."""
+    global _pool_lock
+    if _pool_lock is None:
+        _pool_lock = asyncio.Lock()
+    return _pool_lock
+
+
+async def create_pool(database_url: str | None = None) -> DatabasePool:
+    """
+    Create and initialize global database pool.
+
+    Args:
+        database_url: Optional custom database URL. If not provided,
+                     uses the URL from settings.
+
+    Returns:
+        Initialized DatabasePool instance
+    """
     global _pool
-    if _pool is None:
-        _pool = DatabasePool()
-        await _pool.initialize()
-    return _pool
+    async with _get_lock():
+        if _pool is None:
+            _pool = DatabasePool(database_url)
+            await _pool.initialize()
+        return _pool
 
 
 async def get_pool() -> DatabasePool:
@@ -122,6 +148,28 @@ async def get_connection() -> AsyncGenerator[asyncpg.Connection, None]:
 async def close_pool() -> None:
     """Close global database pool."""
     global _pool
-    if _pool:
-        await _pool.close()
-        _pool = None
+    async with _get_lock():
+        if _pool:
+            await _pool.close()
+            _pool = None
+
+
+async def reset_pool() -> None:
+    """
+    Reset the global pool (for testing).
+
+    This closes any existing pool and clears the global state,
+    allowing tests to start with a fresh pool.
+    """
+    await close_pool()
+
+
+def set_pool(pool: DatabasePool | None) -> None:
+    """
+    Set the global pool directly (for testing).
+
+    Args:
+        pool: DatabasePool instance or None to clear
+    """
+    global _pool
+    _pool = pool

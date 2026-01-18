@@ -10,19 +10,28 @@ Nodes are composed into a graph in graph.py.
 """
 
 import json
+import logging
 import time
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 import asyncpg
 
 from src.agents.ticket_triage.models import TicketState
 from src.core.audit_log import AuditLogger, AuditLogPayload
 from src.core.config import get_settings
-from src.core.llm_gateway import LLMGateway
+from src.core.llm_gateway import (
+    LLMAPIError,
+    LLMGateway,
+    LLMGatewayError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
 from src.core.pii_redaction import PIIRedactor
 from src.core.policy_engine import PolicyEngine
 from src.core.security import SecurityContext
+
+logger = logging.getLogger(__name__)
 
 
 class TriageNodes:
@@ -59,7 +68,7 @@ class TriageNodes:
         This is typically the entry point of the workflow.
         """
         return {
-            "started_at": datetime.now(timezone.utc),
+            "started_at": datetime.now(UTC),
         }
 
     async def pii_redact(self, state: TicketState) -> dict[str, Any]:
@@ -128,10 +137,23 @@ class TriageNodes:
                 "llm_calls": state.llm_calls + 1,
             }
 
-        except Exception as e:
+        except LLMTimeoutError as e:
+            logger.warning("LLM timeout during severity classification: %s", e)
             return {
-                "severity": "P3",  # Default on error
-                "errors": state.errors + [f"Classification error: {str(e)}"],
+                "severity": "P3",  # Default on timeout
+                "errors": state.errors + [f"Classification timeout: {e!s}"],
+            }
+        except (LLMAPIError, LLMResponseError) as e:
+            logger.warning("LLM API error during severity classification: %s", e)
+            return {
+                "severity": "P3",  # Default on API error
+                "errors": state.errors + [f"Classification API error: {e!s}"],
+            }
+        except LLMGatewayError as e:
+            logger.error("LLM gateway error during severity classification: %s", e)
+            return {
+                "severity": "P3",  # Default on gateway error
+                "errors": state.errors + [f"Classification error: {e!s}"],
             }
 
     async def recommend_actions(self, state: TicketState) -> dict[str, Any]:
@@ -152,6 +174,7 @@ class TriageNodes:
                 if not isinstance(actions, list):
                     actions = ["classify", "respond"]
             except json.JSONDecodeError:
+                logger.warning("Failed to parse actions JSON, using defaults")
                 actions = ["classify", "respond"]
 
             latency_ms = int((time.time() - start_time) * 1000)
@@ -163,10 +186,23 @@ class TriageNodes:
                 "llm_calls": state.llm_calls + 1,
             }
 
-        except Exception as e:
+        except LLMTimeoutError as e:
+            logger.warning("LLM timeout during action recommendation: %s", e)
             return {
                 "actions": ["classify", "respond"],
-                "errors": state.errors + [f"Action recommendation error: {str(e)}"],
+                "errors": state.errors + [f"Action recommendation timeout: {e!s}"],
+            }
+        except (LLMAPIError, LLMResponseError) as e:
+            logger.warning("LLM API error during action recommendation: %s", e)
+            return {
+                "actions": ["classify", "respond"],
+                "errors": state.errors + [f"Action recommendation API error: {e!s}"],
+            }
+        except LLMGatewayError as e:
+            logger.error("LLM gateway error during action recommendation: %s", e)
+            return {
+                "actions": ["classify", "respond"],
+                "errors": state.errors + [f"Action recommendation error: {e!s}"],
             }
 
     async def policy_check(self, state: TicketState) -> dict[str, Any]:
@@ -234,10 +270,23 @@ class TriageNodes:
                 "llm_calls": state.llm_calls + 1,
             }
 
-        except Exception as e:
+        except LLMTimeoutError as e:
+            logger.warning("LLM timeout during response generation: %s", e)
             return {
                 "response": None,
-                "errors": state.errors + [f"Response generation error: {str(e)}"],
+                "errors": state.errors + [f"Response generation timeout: {e!s}"],
+            }
+        except (LLMAPIError, LLMResponseError) as e:
+            logger.warning("LLM API error during response generation: %s", e)
+            return {
+                "response": None,
+                "errors": state.errors + [f"Response generation API error: {e!s}"],
+            }
+        except LLMGatewayError as e:
+            logger.error("LLM gateway error during response generation: %s", e)
+            return {
+                "response": None,
+                "errors": state.errors + [f"Response generation error: {e!s}"],
             }
 
     async def write_audit_log(self, state: TicketState) -> dict[str, Any]:
@@ -250,7 +299,7 @@ class TriageNodes:
             # Skip audit logging if no connection
             return {
                 "audit_log_id": None,
-                "completed_at": datetime.now(timezone.utc),
+                "completed_at": datetime.now(UTC),
             }
 
         try:
@@ -284,27 +333,36 @@ class TriageNodes:
 
             return {
                 "audit_log_id": audit_id,
-                "completed_at": datetime.now(timezone.utc),
+                "completed_at": datetime.now(UTC),
             }
 
         except Exception as e:
             return {
                 "audit_log_id": None,
-                "completed_at": datetime.now(timezone.utc),
-                "errors": state.errors + [f"Audit log error: {str(e)}"],
+                "completed_at": datetime.now(UTC),
+                "errors": state.errors + [f"Audit log error: {e!s}"],
             }
 
 
-def should_generate_response(state: TicketState | dict[str, Any]) -> str:
+def should_generate_response(
+    state: TicketState | dict[str, Any],
+) -> Literal["write_audit_log", "generate_response"]:
     """
     Conditional edge: Determine if response should be generated.
 
-    Returns the next node name based on policy decision.
+    Args:
+        state: Current workflow state (TicketState or dict from LangGraph)
 
-    Note: LangGraph passes state as dict, so we handle both types.
+    Returns:
+        Next node name: "write_audit_log" if approval required,
+        "generate_response" otherwise.
+
+    Note:
+        LangGraph passes state as dict, so we handle both types.
     """
+    approval_required: bool
     if isinstance(state, dict):
-        approval_required = state.get("approval_required", False)
+        approval_required = bool(state.get("approval_required", False))
     else:
         approval_required = state.approval_required
 

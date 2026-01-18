@@ -6,17 +6,47 @@ The gateway:
 2. Supports multiple providers (OpenAI, mock)
 3. Tracks latency and estimated costs
 4. Provides deterministic mock responses for testing
+5. Handles errors gracefully with proper logging
 
 IMPORTANT: Never pass raw PII to this gateway. Use PIIRedactor first.
 """
 
+import json
+import logging
 import time
 from dataclasses import dataclass
-from typing import Any
 
 import httpx
 
 from src.core.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
+
+
+class LLMGatewayError(Exception):
+    """Base exception for LLM Gateway errors."""
+
+    pass
+
+
+class LLMAPIError(LLMGatewayError):
+    """Raised when the LLM API returns an error."""
+
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class LLMTimeoutError(LLMGatewayError):
+    """Raised when the LLM API request times out."""
+
+    pass
+
+
+class LLMResponseError(LLMGatewayError):
+    """Raised when the LLM API returns an invalid response."""
+
+    pass
 
 
 @dataclass
@@ -199,7 +229,20 @@ Customer response:"""
         return await self._complete(prompt)
 
     async def _complete(self, prompt: str) -> LLMResponse:
-        """Make LLM API call."""
+        """
+        Make LLM API call with proper error handling.
+
+        Args:
+            prompt: The prompt to send to the LLM
+
+        Returns:
+            LLMResponse with the completion result
+
+        Raises:
+            LLMTimeoutError: If the request times out
+            LLMAPIError: If the API returns an error status
+            LLMResponseError: If the response is malformed
+        """
         start_time = time.time()
 
         client = await self._get_client()
@@ -212,27 +255,83 @@ Customer response:"""
         payload = {
             "model": self.settings.model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-            "max_tokens": 500,
+            "temperature": self.settings.llm_temperature,
+            "max_tokens": self.settings.llm_max_tokens,
         }
 
-        response = await client.post(
-            f"{self.settings.openai_base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-        )
-        response.raise_for_status()
+        try:
+            response = await client.post(
+                f"{self.settings.openai_base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
 
-        data = response.json()
+        except httpx.TimeoutException as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "LLM API timeout after %dms: %s",
+                latency_ms,
+                str(e),
+            )
+            raise LLMTimeoutError(
+                f"LLM API request timed out after {latency_ms}ms"
+            ) from e
+
+        except httpx.HTTPStatusError as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            status_code = e.response.status_code
+            logger.error(
+                "LLM API error (HTTP %d) after %dms: %s",
+                status_code,
+                latency_ms,
+                str(e),
+            )
+            raise LLMAPIError(
+                f"LLM API returned HTTP {status_code}",
+                status_code=status_code,
+            ) from e
+
+        except httpx.RequestError as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "LLM API request error after %dms: %s",
+                latency_ms,
+                str(e),
+            )
+            raise LLMAPIError(f"LLM API request failed: {e}") from e
+
+        # Parse response
+        try:
+            data = response.json()
+        except json.JSONDecodeError as e:
+            logger.error("LLM API returned invalid JSON: %s", str(e))
+            raise LLMResponseError("LLM API returned invalid JSON response") from e
+
         latency_ms = int((time.time() - start_time) * 1000)
 
-        content = data["choices"][0]["message"]["content"]
+        # Extract content with validation
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError) as e:
+            logger.error("LLM API response missing expected fields: %s", str(e))
+            raise LLMResponseError(
+                "LLM API response missing expected fields"
+            ) from e
+
         usage = data.get("usage", {})
         input_tokens = usage.get("prompt_tokens", 0)
         output_tokens = usage.get("completion_tokens", 0)
 
         cost = self._estimate_cost(
             self.settings.model_name,
+            input_tokens,
+            output_tokens,
+        )
+
+        logger.debug(
+            "LLM API call completed in %dms, tokens: %d in / %d out",
+            latency_ms,
             input_tokens,
             output_tokens,
         )

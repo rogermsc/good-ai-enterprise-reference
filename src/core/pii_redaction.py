@@ -13,11 +13,15 @@ Tokenization replaces PII with reversible tokens, enabling:
 1. LLM processing without PII exposure
 2. Response restoration with original values
 3. Audit logging without storing raw PII
+
+Note: PIIRedactor instances are NOT thread-safe. Create a new instance
+per request/task to avoid token counter collisions.
 """
 
 import re
+import threading
 from dataclasses import dataclass, field
-from typing import Pattern
+from re import Pattern
 
 
 @dataclass
@@ -88,6 +92,12 @@ class PIIRedactor:
     Scans text for PII patterns and replaces them with tokens.
     Maintains a token map for later restoration.
 
+    Thread Safety:
+        This class is thread-safe. A lock is used to ensure the token
+        counter doesn't collide when used from multiple threads.
+        However, for best performance in async contexts, create a new
+        instance per request.
+
     Example:
         redactor = PIIRedactor()
         result = redactor.redact("Contact: user@example.com, CPF: 123.456.789-00")
@@ -101,10 +111,14 @@ class PIIRedactor:
     def __init__(self, patterns: list[PIIPattern] | None = None):
         """Initialize with optional custom patterns."""
         self.patterns = patterns or PII_PATTERNS
+        self._lock = threading.Lock()
+        self._token_counter = 0
 
     def redact(self, text: str) -> RedactionResult:
         """
         Detect and tokenize PII in text.
+
+        This method is thread-safe.
 
         Args:
             text: Input text potentially containing PII
@@ -114,27 +128,27 @@ class PIIRedactor:
         """
         token_map: dict[str, str] = {}
         patterns_found: dict[str, int] = {}
-        token_counter = 0
         redacted_text = text
 
-        for pii_pattern in self.patterns:
-            matches = list(pii_pattern.pattern.finditer(redacted_text))
+        with self._lock:
+            for pii_pattern in self.patterns:
+                matches = list(pii_pattern.pattern.finditer(redacted_text))
 
-            if matches:
-                patterns_found[pii_pattern.name] = len(matches)
+                if matches:
+                    patterns_found[pii_pattern.name] = len(matches)
 
-            # Process matches in reverse order to preserve positions
-            for match in reversed(matches):
-                token_counter += 1
-                original_value = match.group()
-                token = f"[{pii_pattern.token_prefix}_{token_counter}]"
+                # Process matches in reverse order to preserve positions
+                for match in reversed(matches):
+                    self._token_counter += 1
+                    original_value = match.group()
+                    token = f"[{pii_pattern.token_prefix}_{self._token_counter}]"
 
-                token_map[token] = original_value
-                redacted_text = (
-                    redacted_text[: match.start()]
-                    + token
-                    + redacted_text[match.end():]
-                )
+                    token_map[token] = original_value
+                    redacted_text = (
+                        redacted_text[: match.start()]
+                        + token
+                        + redacted_text[match.end():]
+                    )
 
         return RedactionResult(
             redacted_text=redacted_text,

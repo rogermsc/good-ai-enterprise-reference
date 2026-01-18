@@ -16,10 +16,9 @@ The workflow:
 7. write_audit_log - Record operation
 """
 
-from typing import Any
 
 import asyncpg
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
 from src.agents.ticket_triage.models import TicketInput, TicketState, TriageResult
 from src.agents.ticket_triage.nodes import TriageNodes, should_generate_response
